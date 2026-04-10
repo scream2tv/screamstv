@@ -7,7 +7,7 @@ import { getAgentByStreamKey, setAgentLive } from './store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MEDIA_ROOT = join(__dirname, '..', 'media');
-const FFMPEG = '/usr/local/bin/ffmpeg';
+const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 
 mkdirSync(MEDIA_ROOT, { recursive: true });
 

@@ -55,18 +55,17 @@ try {
 
 const PORT = Number(process.env.PORT) || 3000;
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
+  const host = process.env.HOST || 'localhost';
   console.log(`
   ╔══════════════════════════════════════════════╗
   ║            Lump.tv  --  Live                 ║
   ╠══════════════════════════════════════════════╣
-  ║  API (v1):    http://localhost:${PORT}/api/v1        ║
-  ║  Skill.md:    http://localhost:${PORT}/skill.md      ║
-  ║  Browse:      http://localhost:${PORT}               ║
-  ║  Dashboard:   http://localhost:${PORT}/dashboard.html║
-  ║  Watch:       http://localhost:${PORT}/watch/<key>   ║
-  ║  RTMP ingest: rtmp://localhost:1935/live/<key>  ║
-  ║  Network:     ${process.env.MIDNIGHT_NETWORK ?? 'preprod'}                       ║
+  ║  API (v1):    http://${host}:${PORT}/api/v1        ║
+  ║  Browse:      http://${host}:${PORT}               ║
+  ║  Dashboard:   http://${host}:${PORT}/dashboard.html║
+  ║  Watch:       http://${host}:${PORT}/watch/<key>   ║
+  ║  RTMP ingest: rtmp://${host}:1935/live/<key>  ║
   ╚══════════════════════════════════════════════╝
   `);
 });

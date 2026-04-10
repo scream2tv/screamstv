@@ -7,10 +7,6 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "link-agent": "node scripts/link-agent.js",
-    "predev": "npm run link-agent",
-    "prebuild": "npm run link-agent",
-    "prestart": "npm run link-agent",
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts"
