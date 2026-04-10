@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lump.tv — OBS Tip Overlay</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: transparent;
+      overflow: hidden;
+      font-family: 'Outfit', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #alertContainer {
+      position: fixed;
+      top: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      pointer-events: none;
+    }
+
+    .tip-alert {
+      width: 100%;
+      background: linear-gradient(135deg, rgba(10, 9, 8, 0.94), rgba(26, 24, 22, 0.94));
+      border: 2px solid rgba(92, 224, 210, 0.5);
+      border-radius: 16px;
+      padding: 24px 28px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow:
+        0 0 30px rgba(92, 224, 210, 0.15),
+        0 0 80px rgba(92, 224, 210, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      animation: alertIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      opacity: 0;
+      position: relative;
+    }
+
+    .tip-alert.exiting {
+      animation: alertOut 0.4s ease-in forwards;
+    }
+
+    .alert-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .alert-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #e85a2a, #ff6b35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      box-shadow: 0 0 20px rgba(232, 90, 42, 0.35);
+      flex-shrink: 0;
+    }
+
+    .alert-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #5ce0d2;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .alert-amount {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: #ff6b35;
+      text-shadow: 0 0 20px rgba(232, 90, 42, 0.4);
+      line-height: 1.1;
+    }
+
+    .alert-currency {
+      font-size: 0.5em;
+      font-weight: 500;
+      color: rgba(255, 107, 53, 0.7);
+      margin-left: 4px;
+    }
+
+    .alert-message {
+      font-size: 1.05rem;
+      color: #e8e4df;
+      margin-top: 8px;
+      line-height: 1.5;
+      font-weight: 500;
+    }
+
+    .alert-bar {
+      height: 3px;
+      background: linear-gradient(90deg, #5ce0d2, #e85a2a);
+      border-radius: 2px;
+      margin-top: 14px;
+      animation: barShrink 8s linear forwards;
+      transform-origin: left;
+    }
+
+    @keyframes alertIn {
+      0% { opacity: 0; transform: translateY(-30px) scale(0.9); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes alertOut {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-20px) scale(0.95); }
+    }
+
+    @keyframes barShrink {
+      from { transform: scaleX(1); }
+      to   { transform: scaleX(0); }
+    }
+
+    .tip-alert::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(92, 224, 210, 0.3), rgba(232, 90, 42, 0.3));
+      z-index: -1;
+      animation: glowPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.4; }
+      50%      { opacity: 1; }
+    }
+
+    #connectionStatus {
+      position: fixed;
+      bottom: 8px;
+      right: 8px;
+      font-size: 0.7rem;
+      color: rgba(255, 255, 255, 0.2);
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body>
+  <div id="alertContainer"></div>
+  <div id="connectionStatus">connecting…</div>
+
+  <script src="/js/overlay.js"></script>
+</body>
+</html>

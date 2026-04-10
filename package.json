@@ -1,0 +1,33 @@
+{
+  "name": "lump-tv",
+  "version": "0.1.0",
+  "description": "Shielded streaming tips — send $NIGHT to streamers on Midnight",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "link-agent": "node scripts/link-agent.js",
+    "predev": "npm run link-agent",
+    "prebuild": "npm run link-agent",
+    "prestart": "npm run link-agent",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "node-media-server": "^4.2.4",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.0",
+    "@types/ws": "^8.18.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}

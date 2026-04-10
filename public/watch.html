@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lump.tv</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+</head>
+<body class="watch-body">
+  <!-- Top Nav -->
+  <nav class="topnav">
+    <a href="/" class="topnav-logo">LUMP.TV</a>
+    <div class="topnav-links">
+      <a href="/">Browse</a>
+    </div>
+    <div class="topnav-right">
+      <span class="topnav-user" id="navUsername"></span>
+    </div>
+  </nav>
+
+  <div class="watch-layout" id="watchLayout">
+    <!-- Main content area -->
+    <div class="watch-main">
+      <!-- Video Player -->
+      <div class="player-wrap" id="playerWrap">
+        <video id="videoPlayer" class="player-video" autoplay playsinline></video>
+        <div id="playerOffline" class="player-offline">
+          <div class="player-offline-icon">📡</div>
+          <p id="offlineText">Stream is offline</p>
+        </div>
+        <div class="player-controls" id="playerControls">
+          <div class="player-controls-left">
+            <button class="player-btn" id="playPauseBtn" title="Play/Pause">▶</button>
+            <button class="player-btn" id="muteBtn" title="Mute">🔊</button>
+            <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="80">
+            <span class="live-pill" id="livePill">● LIVE</span>
+          </div>
+          <div class="player-controls-right">
+            <button class="player-btn" id="theaterBtn" title="Theater mode">🖼</button>
+            <button class="player-btn" id="fullscreenBtn" title="Fullscreen">⛶</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Streamer Info Bar -->
+      <div class="streamer-bar">
+        <div class="streamer-bar-left">
+          <div class="streamer-avatar" id="streamerAvatar">?</div>
+          <div class="streamer-info">
+            <div class="streamer-name" id="streamerName">Loading…</div>
+            <div class="streamer-meta">
+              <span id="streamTitle">—</span>
+              <span class="meta-sep">·</span>
+              <span id="streamCategory" class="text-purple">—</span>
+            </div>
+          </div>
+        </div>
+        <div class="streamer-bar-right">
+          <div class="viewer-count">
+            <span class="viewer-icon">👁</span>
+            <span id="viewerCount">0</span>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="followBtn">Follow</button>
+          <button class="btn btn-secondary btn-sm" disabled title="Coming Soon" style="opacity: 0.6; cursor: not-allowed;">💰 Tip (Soon)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Panel -->
+    <div class="chat-panel" id="chatPanel">
+      <div class="chat-header">
+        <span class="chat-header-title">Live Chat</span>
+        <span class="chat-viewer-count"><span id="chatViewerCount">0</span> watching</span>
+      </div>
+
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-welcome">Welcome to the chat!</div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="chat-input-row">
+          <button class="emoji-toggle" id="emojiToggle" title="Emoji">😀</button>
+          <input type="text" id="chatInput" class="chat-input" placeholder="Send a message…" maxlength="500" autocomplete="off">
+          <button class="chat-send-btn" id="chatSendBtn">Chat</button>
+        </div>
+        <div class="emoji-picker hidden" id="emojiPicker"></div>
+        <div class="chat-tip-row">
+          <button class="tip-btn-chat" disabled style="opacity: 0.5; cursor: not-allowed; background: var(--bg-elevated); border-color: var(--border); color: var(--text-dim);">
+            <span class="tip-icon">🚧</span> Tipping Coming Soon
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tip Modal (Disabled - Coming Soon) -->
+  <!-- Tipping functionality will be enabled in a future update -->
+
+  <div class="copy-toast" id="copyToast">Copied!</div>
+
+  <script src="/js/chat.js"></script>
+  <script src="/js/watch.js"></script>
+</body>
+</html>

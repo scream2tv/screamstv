@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lump.tv — Creator Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+</head>
+<body>
+  <div class="page-bg"></div>
+  <div class="page-bg-image"></div>
+
+  <!-- Setup Screen -->
+  <div id="setupScreen">
+    <div class="container">
+      <header class="header">
+        <a href="/" class="logo" style="text-decoration: none; display: inline-block;">LUMP.TV</a>
+        <div class="tagline">Creator Dashboard</div>
+      </header>
+
+      <div class="card setup-card">
+        <div class="card-title">// Invite Only</div>
+        <div style="text-align: center; padding: 20px 0;">
+          <div style="font-size: 3rem; margin-bottom: 16px;">🔒</div>
+          <h3 style="color: var(--text-bright); margin-bottom: 8px;">Registration is Invite Only</h3>
+          <p class="text-dim text-sm mb-2">
+            Lump.tv is currently in private testing. Public registration will open soon.
+          </p>
+          <p class="text-dim text-sm">
+            Want early access? Stay tuned for announcements.
+          </p>
+        </div>
+
+        <div class="divider mt-3 mb-2"></div>
+        <p class="text-sm text-dim text-center">Already have credentials?</p>
+        <button id="loginBtn" class="btn btn-ghost btn-full mt-1">Sign In with Stream Key</button>
+      </div>
+
+      <!-- Login modal -->
+      <div id="loginModal" class="card setup-card mt-2 hidden">
+        <div class="card-title">// Sign In</div>
+        <div class="form-group">
+          <label for="loginStreamKey">Stream Key</label>
+          <input type="password" id="loginStreamKey" placeholder="Your stream key">
+        </div>
+        <div class="form-group">
+          <label for="loginAuth">Auth Token</label>
+          <input type="password" id="loginAuth" placeholder="Your auth token">
+        </div>
+        <button id="loginSubmit" class="btn btn-primary btn-full">Sign In</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard Screen -->
+  <div id="dashboardScreen" class="hidden">
+    <!-- Dashboard Nav -->
+    <nav class="topnav">
+      <a href="/" class="topnav-logo">LUMP.TV</a>
+      <div class="topnav-links">
+        <a href="/">Browse</a>
+        <a href="/dashboard.html" class="active">Dashboard</a>
+      </div>
+      <div class="topnav-right">
+        <span id="liveIndicator" class="live-badge hidden">● LIVE</span>
+        <span class="topnav-user" id="dashName"></span>
+      </div>
+    </nav>
+
+    <div class="container-wide" style="padding-top: 20px; padding-bottom: 40px;">
+      <div class="dash-grid">
+        <!-- Left Column: Stream Setup -->
+        <div class="dash-col">
+          <div class="card">
+            <div class="card-title">// Stream Setup</div>
+
+            <div class="form-group">
+              <label>Server URL</label>
+              <div class="copyable-field">
+                <span class="mono text-sm">rtmp://localhost:1935/live</span>
+                <button class="copy-btn" onclick="copyText('rtmp://localhost:1935/live')">Copy</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Stream Key</label>
+              <div class="copyable-field">
+                <span class="mono text-sm" id="dashStreamKey">—</span>
+                <button class="copy-btn" onclick="copyField('dashStreamKey')">Copy</button>
+              </div>
+              <p class="text-sm text-dim mt-1">Paste this into OBS → Settings → Stream</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">// Stream Info</div>
+            <div class="form-group">
+              <label for="streamTitle">Title</label>
+              <input type="text" id="streamTitle" placeholder="What are you streaming?" style="font-family: var(--font-sans);">
+            </div>
+            <div class="form-group">
+              <label for="streamCategory">Category</label>
+              <select id="streamCategory">
+                <option>Just Chatting</option>
+                <option>Gaming</option>
+                <option>Music</option>
+                <option>Art</option>
+                <option>IRL</option>
+                <option>Technology</option>
+                <option>Sports</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <button id="updateInfoBtn" class="btn btn-secondary btn-full">Update</button>
+          </div>
+
+          <div class="card">
+            <div class="card-title">// Share</div>
+            <div class="form-group">
+              <label>Watch URL</label>
+              <div class="copyable-field">
+                <span class="mono text-sm" id="watchUrl">—</span>
+                <button class="copy-btn" onclick="copyField('watchUrl')">Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Center Column: Preview + Tips -->
+        <div class="dash-col dash-col-wide">
+          <div class="card">
+            <div class="card-title">// Live Preview</div>
+            <div class="preview-container">
+              <video id="previewVideo" class="preview-video" muted autoplay playsinline></video>
+              <div id="previewOffline" class="preview-offline">
+                <div class="preview-offline-icon">📡</div>
+                <p>Your stream is offline</p>
+                <p class="text-sm text-dim">Start streaming from OBS to see a preview here</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">// Recent Tips</div>
+            <div class="tip-feed" id="tipFeed">
+              <div class="empty-state">
+                <div style="font-size: 2rem; margin-bottom: 12px;">🚧</div>
+                <p class="text-amber" style="font-weight: 600;">Coming Soon</p>
+                <p class="text-dim text-sm mt-1">Shielded tipping with $NIGHT is under development</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Stats -->
+        <div class="dash-col">
+          <div class="card balance-card">
+            <div class="card-title">// Earnings</div>
+            <div style="text-align: center; padding: 10px 0;">
+              <div style="font-size: 1.5rem; margin-bottom: 8px;">🚧</div>
+              <p class="text-amber" style="font-weight: 600; font-size: 0.9rem;">Coming Soon</p>
+              <p class="text-sm text-dim mt-1">Earnings tracking will be available when tipping launches</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">// OBS Overlay</div>
+            <p class="text-sm text-dim mb-1">Add as Browser Source in OBS to show tip alerts on stream.</p>
+            <div class="copyable-field">
+              <span class="mono text-sm" id="overlayUrl" style="font-size: 0.68rem;">—</span>
+              <button class="copy-btn" onclick="copyField('overlayUrl')">Copy</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">// Quick Stats</div>
+            <div class="stat-row">
+              <span class="text-dim">Viewers</span>
+              <span id="viewerCount" class="text-lime mono">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="text-dim">Status</span>
+              <span id="streamStatus" class="text-dim">Offline</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="copy-toast" id="copyToast">Copied!</div>
+
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>
