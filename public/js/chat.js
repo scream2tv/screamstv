@@ -8,11 +8,11 @@ const EMOJIS = [
 ];
 
 function getOrCreateUsername() {
-  let name = localStorage.getItem('lump_username');
+  let name = localStorage.getItem('screams_username');
   if (!name) {
     const num = Math.floor(Math.random() * 9000) + 1000;
     name = `Viewer_${num}`;
-    localStorage.setItem('lump_username', name);
+    localStorage.setItem('screams_username', name);
   }
   return name;
 }

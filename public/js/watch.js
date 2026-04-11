@@ -330,7 +330,7 @@ async function sendTipWithWallet(wallet) {
     await connectedApi.submitTransaction(result.tx);
 
     try {
-      const apiKey = localStorage.getItem('lump_api_key');
+      const apiKey = localStorage.getItem('screams_api_key');
       if (apiKey) {
         await fetch(`/api/v1/streams/${STREAM_KEY}/tip`, {
           method: 'POST',

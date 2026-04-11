@@ -6,9 +6,9 @@ const sidebarToggle = document.getElementById('sidebarToggle');
 if (sidebarToggle) {
   sidebarToggle.addEventListener('click', () => {
     sidebar.classList.toggle('collapsed');
-    localStorage.setItem('lump_sidebar', sidebar.classList.contains('collapsed') ? 'collapsed' : 'expanded');
+    localStorage.setItem('screams_sidebar', sidebar.classList.contains('collapsed') ? 'collapsed' : 'expanded');
   });
-  if (localStorage.getItem('lump_sidebar') === 'collapsed') {
+  if (localStorage.getItem('screams_sidebar') === 'collapsed') {
     sidebar.classList.add('collapsed');
   }
 }

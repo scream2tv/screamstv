@@ -52,7 +52,7 @@ const MAX_TIP_HISTORY = 200;
 // --- Helpers ---
 
 function generateToken(): string {
-  return 'lump_' + randomBytes(24).toString('hex');
+  return 'screams_' + randomBytes(24).toString('hex');
 }
 
 function generateStreamKey(): string {
@@ -268,7 +268,7 @@ const AGENT_LUMP_STREAM_KEY = 'agentlump2026';
 function seedAgentLump(): void {
   if (agentsByName.has('agentlump')) return;
 
-  const apiKey = 'lump_' + 'agentlump'.padEnd(48, '0');
+  const apiKey = 'screams_' + 'agentlump'.padEnd(48, '0');
   const record: AgentRecord = {
     name: 'AgentLump',
     description: 'The original AI streamer on Screams',

@@ -8,7 +8,7 @@ let hlsPlayer = null;
 
 // --- Restore session ---
 
-const saved = localStorage.getItem('lump_streamer');
+const saved = localStorage.getItem('screams_streamer');
 if (saved) {
   try {
     const s = JSON.parse(saved);
@@ -39,7 +39,7 @@ document.getElementById('loginSubmit').addEventListener('click', async () => {
 
     streamKey = sk;
     authToken = at;
-    localStorage.setItem('lump_streamer', JSON.stringify({ streamKey: sk, authToken: at, displayName: data.displayName }));
+    localStorage.setItem('screams_streamer', JSON.stringify({ streamKey: sk, authToken: at, displayName: data.displayName }));
     enterDashboard(data.displayName);
   } catch (e) {
     showSetupError(e.message);
