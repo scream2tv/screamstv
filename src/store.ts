@@ -1,4 +1,15 @@
+// Screams — Data access layer
+//
+// SQLite-backed implementation of the same exports the rest of the app
+// depends on. Every function signature here is preserved from the previous
+// in-memory implementation so callers (routes, middleware, ws) need no
+// changes. The database itself lives in src/db.ts.
+//
+// See src/db.ts for schema and deliberate column-naming deviations from
+// the original Maps-based layout.
+
 import { randomBytes } from 'crypto';
+import { db } from './db.js';
 
 // --- Types ---
 
@@ -34,20 +45,192 @@ export interface TipRecord {
   timestamp: number;
 }
 
-// --- Storage ---
+// --- Row shapes (internal) ---
 
-const agentsByKey = new Map<string, AgentRecord>();
-const agentsByName = new Map<string, AgentRecord>();
-const agentsByStreamKey = new Map<string, AgentRecord>();
+interface AgentRow {
+  id: string;
+  displayName: string;
+  bio: string;
+  avatarUrl: string;
+  streamKey: string;
+  apiKey: string;
+  shieldedAddress: string;
+  title: string;
+  category: string;
+  isLive: number;
+  viewerCount: number;
+  createdAt: number;
+}
 
-const follows = new Map<string, Set<string>>();
-const followers = new Map<string, Set<string>>();
+interface ChatRow {
+  id: number;
+  streamKey: string;
+  username: string;
+  message: string;
+  timestamp: number;
+}
 
-const chatHistory = new Map<string, ChatMessage[]>();
-const tipHistory = new Map<string, TipRecord[]>();
+interface TipRow {
+  id: number;
+  streamKey: string;
+  username: string;
+  amount: string;
+  message: string;
+  txHash: string;
+  timestamp: number;
+}
 
-const MAX_CHAT_HISTORY = 200;
-const MAX_TIP_HISTORY = 200;
+function rowToAgent(row: AgentRow): AgentRecord {
+  return {
+    name: row.displayName,
+    description: row.bio,
+    apiKey: row.apiKey,
+    streamKey: row.streamKey,
+    shieldedAddress: row.shieldedAddress,
+    avatarUrl: row.avatarUrl,
+    title: row.title,
+    category: row.category,
+    isLive: row.isLive === 1,
+    viewerCount: row.viewerCount,
+    createdAt: row.createdAt,
+  };
+}
+
+function rowToChat(row: ChatRow): ChatMessage {
+  return {
+    id: String(row.id),
+    streamKey: row.streamKey,
+    username: row.username,
+    message: row.message,
+    timestamp: row.timestamp,
+  };
+}
+
+function rowToTip(row: TipRow): TipRecord {
+  return {
+    id: String(row.id),
+    streamKey: row.streamKey,
+    username: row.username,
+    amount: row.amount,
+    message: row.message,
+    txHash: row.txHash,
+    timestamp: row.timestamp,
+  };
+}
+
+// --- Constants ---
+
+const CHAT_HISTORY_MAX = 200;
+
+// --- Prepared statements ---
+
+const insertAgent = db.prepare<
+  [
+    string, // id
+    string, // displayName
+    string, // bio
+    string, // avatarUrl
+    string, // streamKey
+    string, // apiKey
+    string, // shieldedAddress
+    string, // title
+    string, // category
+    number, // isLive
+    number, // viewerCount
+    number, // createdAt
+  ]
+>(`
+  INSERT INTO agents
+    (id, displayName, bio, avatarUrl, streamKey, apiKey,
+     shieldedAddress, title, category, isLive, viewerCount, createdAt)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+const insertAgentIgnore = db.prepare<
+  [
+    string, string, string, string, string, string,
+    string, string, string, number, number, number,
+  ]
+>(`
+  INSERT OR IGNORE INTO agents
+    (id, displayName, bio, avatarUrl, streamKey, apiKey,
+     shieldedAddress, title, category, isLive, viewerCount, createdAt)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+const selectAgentById        = db.prepare<[string]>(`SELECT * FROM agents WHERE id = ?`);
+const selectAgentByApiKey    = db.prepare<[string]>(`SELECT * FROM agents WHERE apiKey = ?`);
+const selectAgentByStreamKey = db.prepare<[string]>(`SELECT * FROM agents WHERE streamKey = ?`);
+const selectAllAgents        = db.prepare(`SELECT * FROM agents ORDER BY createdAt ASC`);
+const selectLiveAgents       = db.prepare(`SELECT * FROM agents WHERE isLive = 1 ORDER BY viewerCount DESC`);
+const selectSearchAgents     = db.prepare<[string, string, string, string]>(`
+  SELECT * FROM agents
+  WHERE LOWER(displayName) LIKE ?
+     OR LOWER(title)       LIKE ?
+     OR LOWER(category)    LIKE ?
+     OR LOWER(bio)         LIKE ?
+`);
+
+const updateAgentFields = db.prepare<[string, string, string, string]>(`
+  UPDATE agents SET bio = ?, shieldedAddress = ?, avatarUrl = ? WHERE apiKey = ?
+`);
+
+const updateStreamInfoStmt = db.prepare<[string, string, string]>(`
+  UPDATE agents SET title = ?, category = ? WHERE streamKey = ?
+`);
+
+const setLiveOnStmt = db.prepare<[string]>(`
+  UPDATE agents SET isLive = 1 WHERE streamKey = ?
+`);
+const setLiveOffStmt = db.prepare<[string]>(`
+  UPDATE agents SET isLive = 0, viewerCount = 0 WHERE streamKey = ?
+`);
+
+const updateViewerCountStmt = db.prepare<[number, string]>(`
+  UPDATE agents SET viewerCount = ? WHERE streamKey = ?
+`);
+
+const insertFollow = db.prepare<[string, string]>(`
+  INSERT OR IGNORE INTO follows (followerId, followeeId) VALUES (?, ?)
+`);
+const deleteFollow = db.prepare<[string, string]>(`
+  DELETE FROM follows WHERE followerId = ? AND followeeId = ?
+`);
+const selectFollowers = db.prepare<[string]>(`
+  SELECT followerId FROM follows WHERE followeeId = ?
+`);
+const selectFollowing = db.prepare<[string]>(`
+  SELECT followeeId FROM follows WHERE followerId = ?
+`);
+const selectIsFollowing = db.prepare<[string, string]>(`
+  SELECT 1 AS ok FROM follows WHERE followerId = ? AND followeeId = ?
+`);
+
+const insertChat = db.prepare<[string, string, string, number]>(`
+  INSERT INTO chat_messages (streamKey, username, message, timestamp)
+  VALUES (?, ?, ?, ?)
+`);
+const selectChatHistory = db.prepare<[string, number]>(`
+  SELECT * FROM (
+    SELECT * FROM chat_messages
+    WHERE streamKey = ?
+    ORDER BY timestamp DESC
+    LIMIT ?
+  ) ORDER BY timestamp ASC
+`);
+
+const insertTip = db.prepare<[string, string, string, string, string, number]>(`
+  INSERT INTO tips (streamKey, username, amount, message, txHash, timestamp)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+const selectTipHistory = db.prepare<[string, number]>(`
+  SELECT * FROM (
+    SELECT * FROM tips
+    WHERE streamKey = ?
+    ORDER BY timestamp DESC
+    LIMIT ?
+  ) ORDER BY timestamp ASC
+`);
 
 // --- Helpers ---
 
@@ -59,172 +242,162 @@ function generateStreamKey(): string {
   return randomBytes(16).toString('hex');
 }
 
-function generateId(): string {
-  return randomBytes(8).toString('hex');
-}
-
 // --- Agent CRUD ---
 
 export function registerAgent(name: string, description: string): AgentRecord {
-  if (agentsByName.has(name.toLowerCase())) {
+  const id = name.toLowerCase();
+  if (selectAgentById.get(id)) {
     throw new Error('Name already taken');
   }
 
   const apiKey = generateToken();
   const streamKey = generateStreamKey();
+  const createdAt = Date.now();
 
-  const record: AgentRecord = {
+  insertAgent.run(
+    id,
     name,
     description,
-    apiKey,
+    '',
     streamKey,
-    shieldedAddress: '',
-    avatarUrl: '',
-    title: `${name}'s stream`,
-    category: 'Just Chatting',
-    isLive: false,
-    viewerCount: 0,
-    createdAt: Date.now(),
-  };
-
-  agentsByKey.set(apiKey, record);
-  agentsByName.set(name.toLowerCase(), record);
-  agentsByStreamKey.set(streamKey, record);
+    apiKey,
+    '',
+    `${name}'s stream`,
+    'Just Chatting',
+    0,
+    0,
+    createdAt,
+  );
 
   console.log(`[store] registered agent "${name}" key=${apiKey.slice(0, 12)}…`);
-  return record;
+  return rowToAgent(selectAgentById.get(id) as AgentRow);
 }
 
 export function getAgentByKey(apiKey: string): AgentRecord | undefined {
-  return agentsByKey.get(apiKey);
+  const row = selectAgentByApiKey.get(apiKey) as AgentRow | undefined;
+  return row ? rowToAgent(row) : undefined;
 }
 
 export function getAgentByName(name: string): AgentRecord | undefined {
-  return agentsByName.get(name.toLowerCase());
+  const row = selectAgentById.get(name.toLowerCase()) as AgentRow | undefined;
+  return row ? rowToAgent(row) : undefined;
 }
 
 export function getAgentByStreamKey(streamKey: string): AgentRecord | undefined {
-  return agentsByStreamKey.get(streamKey);
+  const row = selectAgentByStreamKey.get(streamKey) as AgentRow | undefined;
+  return row ? rowToAgent(row) : undefined;
 }
 
 export function updateAgent(
   apiKey: string,
   updates: Partial<Pick<AgentRecord, 'description' | 'shieldedAddress' | 'avatarUrl'>>,
 ): AgentRecord | undefined {
-  const agent = agentsByKey.get(apiKey);
-  if (!agent) return undefined;
+  const current = selectAgentByApiKey.get(apiKey) as AgentRow | undefined;
+  if (!current) return undefined;
 
-  if (updates.description !== undefined) agent.description = updates.description;
-  if (updates.shieldedAddress !== undefined) agent.shieldedAddress = updates.shieldedAddress;
-  if (updates.avatarUrl !== undefined) agent.avatarUrl = updates.avatarUrl;
+  updateAgentFields.run(
+    updates.description ?? current.bio,
+    updates.shieldedAddress ?? current.shieldedAddress,
+    updates.avatarUrl ?? current.avatarUrl,
+    apiKey,
+  );
 
-  return agent;
+  return rowToAgent(selectAgentByApiKey.get(apiKey) as AgentRow);
 }
 
 // --- Stream Info ---
 
 export function updateStreamInfo(streamKey: string, title?: string, category?: string): void {
-  const agent = agentsByStreamKey.get(streamKey);
-  if (!agent) return;
-  if (title !== undefined) agent.title = title;
-  if (category !== undefined) agent.category = category;
+  const current = selectAgentByStreamKey.get(streamKey) as AgentRow | undefined;
+  if (!current) return;
+
+  updateStreamInfoStmt.run(
+    title ?? current.title,
+    category ?? current.category,
+    streamKey,
+  );
 }
 
 export function setAgentLive(streamKey: string, isLive: boolean): void {
-  const agent = agentsByStreamKey.get(streamKey);
-  if (agent) {
-    agent.isLive = isLive;
-    if (!isLive) agent.viewerCount = 0;
+  if (isLive) {
+    setLiveOnStmt.run(streamKey);
+  } else {
+    setLiveOffStmt.run(streamKey);
   }
 }
 
 export function updateViewerCount(streamKey: string, count: number): void {
-  const agent = agentsByStreamKey.get(streamKey);
-  if (agent) agent.viewerCount = count;
+  updateViewerCountStmt.run(count, streamKey);
 }
 
 // --- Browse ---
 
 export function getAllAgents(): AgentRecord[] {
-  return Array.from(agentsByKey.values());
+  return (selectAllAgents.all() as AgentRow[]).map(rowToAgent);
 }
 
 export function getLiveAgents(): AgentRecord[] {
-  return Array.from(agentsByKey.values()).filter((a) => a.isLive);
+  return (selectLiveAgents.all() as AgentRow[]).map(rowToAgent);
 }
 
 export function searchAgents(query: string): AgentRecord[] {
-  const q = query.toLowerCase();
-  return Array.from(agentsByKey.values()).filter(
-    (a) =>
-      a.name.toLowerCase().includes(q) ||
-      a.title.toLowerCase().includes(q) ||
-      a.category.toLowerCase().includes(q) ||
-      a.description.toLowerCase().includes(q),
-  );
+  const pattern = `%${query.toLowerCase()}%`;
+  return (
+    selectSearchAgents.all(pattern, pattern, pattern, pattern) as AgentRow[]
+  ).map(rowToAgent);
 }
 
 // --- Follows ---
 
 export function followAgent(followerName: string, targetName: string): boolean {
-  const target = agentsByName.get(targetName.toLowerCase());
+  const target = selectAgentById.get(targetName.toLowerCase()) as AgentRow | undefined;
   if (!target) return false;
-
-  const normalFollower = followerName.toLowerCase();
-  const normalTarget = targetName.toLowerCase();
-
-  if (!follows.has(normalFollower)) follows.set(normalFollower, new Set());
-  if (!followers.has(normalTarget)) followers.set(normalTarget, new Set());
-
-  follows.get(normalFollower)!.add(normalTarget);
-  followers.get(normalTarget)!.add(normalFollower);
+  insertFollow.run(followerName.toLowerCase(), targetName.toLowerCase());
   return true;
 }
 
 export function unfollowAgent(followerName: string, targetName: string): boolean {
-  const normalFollower = followerName.toLowerCase();
-  const normalTarget = targetName.toLowerCase();
-
-  follows.get(normalFollower)?.delete(normalTarget);
-  followers.get(normalTarget)?.delete(normalFollower);
+  deleteFollow.run(followerName.toLowerCase(), targetName.toLowerCase());
   return true;
 }
 
 export function getFollowers(name: string): string[] {
-  return Array.from(followers.get(name.toLowerCase()) ?? []);
+  const rows = selectFollowers.all(name.toLowerCase()) as Array<{ followerId: string }>;
+  return rows.map((r) => r.followerId);
 }
 
 export function getFollowing(name: string): string[] {
-  return Array.from(follows.get(name.toLowerCase()) ?? []);
+  const rows = selectFollowing.all(name.toLowerCase()) as Array<{ followeeId: string }>;
+  return rows.map((r) => r.followeeId);
 }
 
 export function isFollowing(followerName: string, targetName: string): boolean {
-  return follows.get(followerName.toLowerCase())?.has(targetName.toLowerCase()) ?? false;
+  return (
+    selectIsFollowing.get(followerName.toLowerCase(), targetName.toLowerCase()) !== undefined
+  );
 }
 
 // --- Chat History ---
 
 export function addChatMessage(streamKey: string, username: string, message: string): ChatMessage {
-  if (!chatHistory.has(streamKey)) chatHistory.set(streamKey, []);
-  const history = chatHistory.get(streamKey)!;
-
-  const record: ChatMessage = {
-    id: generateId(),
+  const timestamp = Date.now();
+  const result = insertChat.run(streamKey, username, message, timestamp);
+  return {
+    id: String(result.lastInsertRowid),
     streamKey,
     username,
     message,
-    timestamp: Date.now(),
+    timestamp,
   };
-
-  history.push(record);
-  if (history.length > MAX_CHAT_HISTORY) history.shift();
-
-  return record;
 }
 
+// Caps at 200 messages per stream key (per spec). Callers may request fewer
+// via `limit` but can never exceed the hard ceiling. Rows are returned in
+// ascending timestamp order.
 export function getChatHistory(streamKey: string, limit: number = 50): ChatMessage[] {
-  const history = chatHistory.get(streamKey) ?? [];
-  return history.slice(-limit);
+  const effective = Math.min(limit, CHAT_HISTORY_MAX);
+  const rows = selectChatHistory.all(streamKey, effective) as ChatRow[];
+  return rows.map(rowToChat);
 }
 
 // --- Tip History ---
@@ -236,60 +409,56 @@ export function addTipRecord(
   message: string,
   txHash: string = '',
 ): TipRecord {
-  if (!tipHistory.has(streamKey)) tipHistory.set(streamKey, []);
-  const history = tipHistory.get(streamKey)!;
-
-  const record: TipRecord = {
-    id: generateId(),
+  const timestamp = Date.now();
+  const result = insertTip.run(streamKey, username, amount, message, txHash, timestamp);
+  return {
+    id: String(result.lastInsertRowid),
     streamKey,
     username,
     amount,
     message,
     txHash,
-    timestamp: Date.now(),
+    timestamp,
   };
-
-  history.push(record);
-  if (history.length > MAX_TIP_HISTORY) history.shift();
-
-  return record;
 }
 
 export function getTipHistory(streamKey: string, limit: number = 25): TipRecord[] {
-  const history = tipHistory.get(streamKey) ?? [];
-  return history.slice(-limit);
+  const rows = selectTipHistory.all(streamKey, limit) as TipRow[];
+  return rows.map(rowToTip);
 }
 
 // --- Seed Agent Lump Profile ---
-// Pre-create the Agent Lump streamer with a known stream key for testing
+// Pre-create the Agent Lump streamer with a known stream key for testing.
+// INSERT OR IGNORE so repeated boots are idempotent — the stored row wins
+// if the DB already has an AgentLump entry.
 
 const AGENT_LUMP_STREAM_KEY = 'agentlump2026';
 
 function seedAgentLump(): void {
-  if (agentsByName.has('agentlump')) return;
-
   const apiKey = 'screams_' + 'agentlump'.padEnd(48, '0');
-  const record: AgentRecord = {
-    name: 'AgentLump',
-    description: 'The original AI streamer on Screams',
+
+  const result = insertAgentIgnore.run(
+    'agentlump',
+    'AgentLump',
+    'The original AI streamer on Screams',
+    '',
+    AGENT_LUMP_STREAM_KEY,
     apiKey,
-    streamKey: AGENT_LUMP_STREAM_KEY,
-    shieldedAddress: '',
-    avatarUrl: '',
-    title: "Agent Lump's Stream",
-    category: 'Just Chatting',
-    isLive: false,
-    viewerCount: 0,
-    createdAt: Date.now(),
-  };
+    '',
+    "Agent Lump's Stream",
+    'Just Chatting',
+    0,
+    0,
+    Date.now(),
+  );
 
-  agentsByKey.set(apiKey, record);
-  agentsByName.set('agentlump', record);
-  agentsByStreamKey.set(AGENT_LUMP_STREAM_KEY, record);
-
-  console.log('[store] Seeded Agent Lump profile');
-  console.log('[store]   Stream Key:', AGENT_LUMP_STREAM_KEY);
-  console.log('[store]   API Key:', apiKey);
+  if (result.changes > 0) {
+    console.log('[store] Seeded Agent Lump profile');
+    console.log('[store]   Stream Key:', AGENT_LUMP_STREAM_KEY);
+    console.log('[store]   API Key:', apiKey);
+  } else {
+    console.log('[store] Agent Lump profile already in DB (skipped seeding)');
+  }
 }
 
 seedAgentLump();
