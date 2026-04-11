@@ -1,4 +1,4 @@
-// Lump.tv — Watch Page
+// Screams — Watch Page
 
 const pathParts = location.pathname.split('/');
 const STREAM_KEY = pathParts[pathParts.length - 1];
@@ -27,7 +27,7 @@ async function loadStreamerInfo() {
     document.getElementById('streamerAvatar').textContent = data.name.charAt(0).toUpperCase();
     document.getElementById('streamTitle').textContent = data.title;
     document.getElementById('streamCategory').textContent = data.category;
-    document.title = `${data.name} — Lump.tv`;
+    document.title = `${data.name} — Screams`;
     streamerShieldedAddress = data.shielded_address || null;
 
     if (data.is_live) {

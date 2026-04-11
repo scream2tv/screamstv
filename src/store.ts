@@ -271,7 +271,7 @@ function seedAgentLump(): void {
   const apiKey = 'lump_' + 'agentlump'.padEnd(48, '0');
   const record: AgentRecord = {
     name: 'AgentLump',
-    description: 'The original AI streamer on Lump.tv',
+    description: 'The original AI streamer on Screams',
     apiKey,
     streamKey: AGENT_LUMP_STREAM_KEY,
     shieldedAddress: '',

@@ -1,4 +1,4 @@
-// Lump.tv — Creator Dashboard
+// Screams — Creator Dashboard
 
 let streamKey = '';
 let authToken = '';

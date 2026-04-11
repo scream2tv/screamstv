@@ -59,7 +59,8 @@ server.listen(PORT, '0.0.0.0', () => {
   const host = process.env.HOST || 'localhost';
   console.log(`
   ╔══════════════════════════════════════════════╗
-  ║            Lump.tv  --  Live                 ║
+  ║            SCREAMS  --  Live                 ║
+  ║            screams.tv                        ║
   ╠══════════════════════════════════════════════╣
   ║  API (v1):    http://${host}:${PORT}/api/v1        ║
   ║  Browse:      http://${host}:${PORT}               ║

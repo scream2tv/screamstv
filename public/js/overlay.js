@@ -1,4 +1,4 @@
-// Lump.tv — OBS Overlay
+// Screams — OBS Overlay
 
 const ALERT_DURATION_MS = 8000;
 const EXIT_ANIMATION_MS = 400;

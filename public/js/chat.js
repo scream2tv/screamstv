@@ -1,4 +1,4 @@
-// Lump.tv — Chat System
+// Screams — Chat System
 
 const EMOJIS = [
   '😀','😂','🤣','😍','🥰','😎','🤩','🥳','😭','😱',

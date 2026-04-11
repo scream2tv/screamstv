@@ -1,4 +1,4 @@
-// Lump.tv — Browse / Landing Page
+// Screams — Browse / Landing Page
 
 const sidebar = document.getElementById('sidebar');
 const sidebarToggle = document.getElementById('sidebarToggle');

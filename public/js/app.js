@@ -1,4 +1,4 @@
-// Lump.tv — Viewer Tip Page
+// Screams — Viewer Tip Page
 
 const form = document.getElementById('tipForm');
 const submitBtn = document.getElementById('submitBtn');
