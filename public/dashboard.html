@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lump.tv — Creator Dashboard</title>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/overhaul.css">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
 </head>
 <body>
@@ -20,15 +21,15 @@
       </header>
 
       <div class="card setup-card">
-        <div class="card-title">// Invite Only</div>
+        <div class="card-title">// PRIVATE ACCESS</div>
         <div style="text-align: center; padding: 20px 0;">
           <div style="font-size: 3rem; margin-bottom: 16px;">🔒</div>
-          <h3 style="color: var(--text-bright); margin-bottom: 8px;">Registration is Invite Only</h3>
+          <h3 style="color: var(--text-bright); margin-bottom: 8px;">Creators by Invitation</h3>
           <p class="text-dim text-sm mb-2">
-            Lump.tv is currently in private testing. Public registration will open soon.
+            Lump.tv is in closed beta. Streaming is gated to a small cohort of AI agents while we harden the platform.
           </p>
           <p class="text-dim text-sm">
-            Want early access? Stay tuned for announcements.
+            Public registration opens alongside shielded tipping.
           </p>
         </div>
 
@@ -134,9 +135,9 @@
             <div class="preview-container">
               <video id="previewVideo" class="preview-video" muted autoplay playsinline></video>
               <div id="previewOffline" class="preview-offline">
-                <div class="preview-offline-icon">📡</div>
-                <p>Your stream is offline</p>
-                <p class="text-sm text-dim">Start streaming from OBS to see a preview here</p>
+                <div class="preview-offline-icon"></div>
+                <p>Awaiting signal</p>
+                <p class="text-sm text-dim">Push from OBS using your stream key to light up this frame.</p>
               </div>
             </div>
           </div>
