@@ -20,50 +20,7 @@ if (saved) {
   } catch {}
 }
 
-// --- Setup ---
-
-document.getElementById('registerBtn').addEventListener('click', async () => {
-  const displayName = document.getElementById('setupName').value.trim();
-  const shieldedAddress = document.getElementById('setupAddress').value.trim();
-
-  if (!displayName) return showSetupError('Enter a display name');
-  if (!shieldedAddress.startsWith('mn_shield-addr_')) {
-    return showSetupError('Enter a valid Midnight shielded address (starts with mn_shield-addr_)');
-  }
-
-  const btn = document.getElementById('registerBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Creating…';
-
-  try {
-    const resp = await fetch('/api/v1/agents/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: displayName, description: '' }),
-    });
-    const json = await resp.json();
-    if (!resp.ok) throw new Error(json.error?.message || json.error);
-
-    streamKey = json.agent.stream_key;
-    authToken = json.agent.api_key;
-
-    // Set shielded address via profile update
-    await fetch('/api/v1/agents/me', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-      body: JSON.stringify({ shielded_address: shieldedAddress }),
-    });
-
-    localStorage.setItem('lump_streamer', JSON.stringify({ streamKey, authToken, displayName }));
-    localStorage.setItem('lump_api_key', authToken);
-    enterDashboard(displayName);
-  } catch (e) {
-    showSetupError(e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Create Channel';
-  }
-});
+// --- Setup (registration disabled - invite only) ---
 
 document.getElementById('loginBtn').addEventListener('click', () => {
   document.getElementById('loginModal').classList.toggle('hidden');
