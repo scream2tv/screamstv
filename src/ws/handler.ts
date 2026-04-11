@@ -7,17 +7,23 @@ import {
   getAgentByKey,
   addChatMessage,
 } from '../store.js';
+import { sanitizeChat } from '../utils/sanitize.js';
 
 export interface WsMessage {
   type: 'chat' | 'tip' | 'viewer_count' | 'system' | 'connected';
   [key: string]: any;
 }
 
+// Per-connection rate limit: max 10 messages per 5-second window. Reset
+// is piggy-backed on the existing viewer-count interval below.
+const WS_MESSAGE_LIMIT = 10;
+
 interface ClientEntry {
   ws: WebSocket;
   streamKey: string;
   username: string;
   role: 'viewer' | 'streamer';
+  messageCount: number;
 }
 
 const clients = new Map<WebSocket, ClientEntry>();
@@ -42,15 +48,25 @@ export function initWebSocket(server: Server): WebSocketServer {
     const streamKey = url.searchParams.get('stream') ?? '';
     const role = (url.searchParams.get('role') ?? 'viewer') as 'viewer' | 'streamer';
 
-    // Resolve username: prefer agent auth via token, fall back to query param
-    let username = url.searchParams.get('username') ?? 'Viewer';
+    // Resolve username:
+    //   - token present + valid -> use the agent's display name
+    //   - token present + invalid -> reject with 4001 (no silent fallback)
+    //   - no token -> force "Viewer" (ignore ?username=) so only
+    //     authenticated agents can impersonate a custom identity in chat
     const token = url.searchParams.get('token');
+    let username: string;
     if (token) {
       const agent = getAgentByKey(token);
-      if (agent) username = agent.name;
+      if (!agent) {
+        ws.close(4001, 'Invalid token');
+        return;
+      }
+      username = agent.name;
+    } else {
+      username = 'Viewer';
     }
 
-    clients.set(ws, { ws, streamKey, username, role });
+    clients.set(ws, { ws, streamKey, username, role, messageCount: 0 });
 
     const count = getViewerCount(streamKey);
     updateViewerCount(streamKey, count);
@@ -77,10 +93,13 @@ export function initWebSocket(server: Server): WebSocketServer {
     });
   });
 
+  // Every 5s: (1) broadcast viewer counts per active stream,
+  // (2) reset per-connection rate-limit counters.
   setInterval(() => {
     const streams = new Set<string>();
     for (const entry of clients.values()) {
       streams.add(entry.streamKey);
+      entry.messageCount = 0;
     }
     for (const sk of streams) {
       const count = getViewerCount(sk);
@@ -96,8 +115,16 @@ function handleClientMessage(ws: WebSocket, msg: any): void {
   const entry = clients.get(ws);
   if (!entry) return;
 
+  entry.messageCount++;
+  if (entry.messageCount > WS_MESSAGE_LIMIT) {
+    try {
+      ws.send(JSON.stringify({ type: 'system', message: 'Rate limited. Slow down.' }));
+    } catch {}
+    return;
+  }
+
   if (msg.type === 'chat' && typeof msg.message === 'string') {
-    const text = msg.message.trim().slice(0, 500);
+    const text = sanitizeChat(msg.message.trim().slice(0, 500));
     if (!text) return;
 
     addChatMessage(entry.streamKey, entry.username, text);

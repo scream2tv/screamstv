@@ -234,8 +234,12 @@ const selectTipHistory = db.prepare<[string, number]>(`
 
 // --- Helpers ---
 
+// 32 bytes = 256 bits of entropy (hex-encoded to 64 chars). The "screams_"
+// prefix is cosmetic and not counted toward entropy. Upgraded from 24 bytes
+// during auth hardening — existing seeded keys with the old padding shape
+// remain valid because the token is an opaque string.
 function generateToken(): string {
-  return 'screams_' + randomBytes(24).toString('hex');
+  return 'screams_' + randomBytes(32).toString('hex');
 }
 
 function generateStreamKey(): string {

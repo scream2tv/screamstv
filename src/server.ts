@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -16,6 +17,39 @@ const app = express();
 const server = createServer(app);
 
 app.use(cors());
+
+// Security headers (before any static/HTML response).
+// CSP notes:
+//   - scriptSrc allows jsdelivr for hls.js on the watch/dashboard pages
+//   - styleSrc allows 'unsafe-inline' for existing style attributes and
+//     the Google Fonts @import in public/css/style.css
+//   - fontSrc covers fonts.gstatic.com (Outfit, JetBrains Mono) + data URIs
+//   - imgSrc allows data: for the inline SVG noise texture and blob: for
+//     client-generated thumbnails
+//   - connectSrc allows ws:/wss: for the same-origin WebSocket hub
+//   - mediaSrc/workerSrc cover HLS playback via hls.js blob workers
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        mediaSrc: ["'self'", 'blob:'],
+        connectSrc: ["'self'", 'ws:', 'wss:'],
+        workerSrc: ["'self'", 'blob:'],
+        objectSrc: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // hls.js blob workers need this off
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    frameguard: { action: 'deny' },
+  }),
+);
+
 app.use(express.json());
 
 const publicDir = join(__dirname, '..', 'public');

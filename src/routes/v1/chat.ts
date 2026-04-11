@@ -7,6 +7,7 @@ import {
   getChatHistory,
 } from '../../store.js';
 import { broadcastToStream } from '../../ws/handler.js';
+import { sanitizeChat } from '../../utils/sanitize.js';
 
 const router = Router();
 
@@ -26,7 +27,7 @@ router.post(
       return;
     }
 
-    const text = (message ?? '').trim().slice(0, 500);
+    const text = sanitizeChat((message ?? '').trim().slice(0, 500));
     if (!text) {
       res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'message is required' } });
       return;

@@ -7,6 +7,7 @@ import {
   getTipHistory,
 } from '../../store.js';
 import { broadcastTip } from '../../ws/handler.js';
+import { sanitizeChat } from '../../utils/sanitize.js';
 
 const router = Router();
 
@@ -32,7 +33,7 @@ router.post(
     }
 
     const username = req.agent!.name;
-    const tipMessage = (message ?? '').slice(0, 280);
+    const tipMessage = sanitizeChat((message ?? '').slice(0, 280));
 
     const record = addTipRecord(streamKey, username, amount, tipMessage);
 
