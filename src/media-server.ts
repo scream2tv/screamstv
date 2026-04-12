@@ -29,7 +29,11 @@ function startHlsTranscode(streamKey: string): void {
 
   const args = [
     '-i', `rtmp://127.0.0.1:1935/live/${streamKey}`,
-    '-c:v', 'copy',
+    '-c:v', 'libx264',
+    '-preset', 'ultrafast',
+    '-tune', 'zerolatency',
+    '-crf', '23',
+    '-force_key_frames', 'expr:gte(t,n_forced*2)',
     '-c:a', 'aac',
     '-b:a', '128k',
     '-f', 'hls',
