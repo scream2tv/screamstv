@@ -95,7 +95,7 @@ function initPlayer() {
     nativeHlsActive = false;
     hlsPlayer = new Hls({
       liveSyncDurationCount: 3,
-      liveMaxLatencyDurationCount: 8,
+      liveMaxLatencyDurationCount: 6,
       liveBackBufferLength: 0,
       maxBufferLength: 15,
       maxMaxBufferLength: 30,
