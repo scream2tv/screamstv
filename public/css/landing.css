@@ -690,3 +690,15 @@
     width: 100%;
   }
 }
+
+/* Accessibility: respect OS-level "Reduce motion" setting */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .landing-hero-bg { animation: none; }
+  .landing-hero::before, .landing-hero::after { animation: none; }
+  .landing-hero-badge { backdrop-filter: none; }
+}

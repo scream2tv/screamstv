@@ -83,9 +83,37 @@ function startPreview() {
   const offline = document.getElementById('previewOffline');
   const hlsUrl = `${location.origin}/media/live/${streamKey}/index.m3u8`;
 
+  const RETRY_MIN = 5000;
+  const RETRY_MAX = 30000;
+  let retryDelay = RETRY_MIN;
   let retryTimer = null;
 
+  function scheduleRetry() {
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(tryConnect, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, RETRY_MAX);
+  }
+
+  function showOnline() {
+    video.play().catch(() => { video.muted = true; video.play().catch(() => {}); });
+    video.style.display = 'block';
+    offline.style.display = 'none';
+    document.getElementById('liveIndicator').classList.remove('hidden');
+    document.getElementById('streamStatus').textContent = 'Live';
+    document.getElementById('streamStatus').style.color = 'var(--green)';
+  }
+
+  function showOffline() {
+    video.style.display = 'none';
+    offline.style.display = 'flex';
+    document.getElementById('liveIndicator').classList.add('hidden');
+    document.getElementById('streamStatus').textContent = 'Offline';
+    document.getElementById('streamStatus').style.color = '';
+  }
+
   function tryConnect() {
+    clearTimeout(retryTimer);
+
     if (typeof Hls !== 'undefined' && Hls.isSupported()) {
       if (hlsPlayer) hlsPlayer.destroy();
       hlsPlayer = new Hls({ liveSyncDurationCount: 3, liveMaxLatencyDurationCount: 6 });
@@ -93,37 +121,35 @@ function startPreview() {
       hlsPlayer.attachMedia(video);
 
       hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {});
-        video.style.display = 'block';
-        offline.style.display = 'none';
-        document.getElementById('liveIndicator').classList.remove('hidden');
-        document.getElementById('streamStatus').textContent = 'Live';
-        document.getElementById('streamStatus').style.color = 'var(--green)';
+        // Connected — stop retrying and reset backoff for next disconnect
+        clearTimeout(retryTimer);
+        retryDelay = RETRY_MIN;
+        showOnline();
       });
 
       hlsPlayer.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
-          video.style.display = 'none';
-          offline.style.display = 'flex';
-          document.getElementById('liveIndicator').classList.add('hidden');
-          document.getElementById('streamStatus').textContent = 'Offline';
-          document.getElementById('streamStatus').style.color = '';
+          showOffline();
           hlsPlayer.destroy();
           hlsPlayer = null;
+          scheduleRetry();
         }
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = hlsUrl;
       video.addEventListener('loadedmetadata', () => {
-        video.play().catch(() => {});
-        video.style.display = 'block';
-        offline.style.display = 'none';
-      });
+        clearTimeout(retryTimer);
+        retryDelay = RETRY_MIN;
+        showOnline();
+      }, { once: true });
+      video.addEventListener('error', () => {
+        showOffline();
+        scheduleRetry();
+      }, { once: true });
     }
   }
 
   tryConnect();
-  retryTimer = setInterval(tryConnect, 5000);
 }
 
 // --- WebSocket ---

@@ -123,11 +123,12 @@ function renderGridError(gridId, message) {
 })();
 
 let firstLoadDone = false;
+let prevStreamData = null; // stringified snapshot for cheap diff
 
 async function loadStreams() {
   if (!firstLoadDone) {
-    renderGridLoading('liveGrid', 'Loading streams…');
-    renderGridLoading('allGrid', 'Loading channels…');
+    renderGridLoading('liveGrid', 'Loading streams\u2026');
+    renderGridLoading('allGrid', 'Loading channels\u2026');
   }
   try {
     const resp = await fetch('/api/v1/streams');
@@ -142,6 +143,11 @@ async function loadStreams() {
       viewerCount: s.viewer_count,
     }));
 
+    // Skip DOM work entirely if nothing changed since last poll
+    const snapshot = JSON.stringify(streams);
+    if (snapshot === prevStreamData) return;
+    prevStreamData = snapshot;
+
     const live = streams.filter(s => s.isLive);
     const all = streams;
 
@@ -153,8 +159,8 @@ async function loadStreams() {
     firstLoadDone = true;
   } catch (e) {
     console.error('Failed to load streams:', e);
-    renderGridError('liveGrid', "Couldn't load streams — retrying…");
-    renderGridError('allGrid', "Couldn't load channels — retrying…");
+    renderGridError('liveGrid', "Couldn't load streams \u2014 retrying\u2026");
+    renderGridError('allGrid', "Couldn't load channels \u2014 retrying\u2026");
   }
 }
 

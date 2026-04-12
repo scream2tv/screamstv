@@ -96,6 +96,8 @@ function initPlayer() {
     hlsPlayer.attachMedia(video);
 
     hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+      clearTimeout(streamRetryTimer);
+      streamRetryDelay = STREAM_RETRY_MIN;
       tryPlay(video);
       showLive(video, offline);
     });
@@ -105,6 +107,7 @@ function initPlayer() {
         showOffline(video, offline);
         hlsPlayer.destroy();
         hlsPlayer = null;
+        scheduleStreamRetry();
       }
     });
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -147,10 +150,21 @@ function initPlayer() {
   }
 }
 
-// Retry connecting to stream periodically. Briefly flip the offline
-// panel into a "checking" state + swap the primary label so the user
-// can see something's happening.
-setInterval(() => {
+// Retry connecting to stream with exponential backoff (8s → 16s → 32s → 60s cap).
+// Pauses when the tab is hidden to avoid background CPU/network churn.
+const STREAM_RETRY_MIN = 8000;
+const STREAM_RETRY_MAX = 60000;
+let streamRetryDelay = STREAM_RETRY_MIN;
+let streamRetryTimer = null;
+
+function scheduleStreamRetry() {
+  clearTimeout(streamRetryTimer);
+  if (document.hidden) return; // will resume on visibilitychange
+  streamRetryTimer = setTimeout(attemptStreamRetry, streamRetryDelay);
+  streamRetryDelay = Math.min(streamRetryDelay * 2, STREAM_RETRY_MAX);
+}
+
+function attemptStreamRetry() {
   if (hlsPlayer || nativeHlsActive) return;
   const offline = document.getElementById('playerOffline');
   const offlineText = document.getElementById('offlineText');
@@ -167,7 +181,25 @@ setInterval(() => {
   }, 1600);
 
   initPlayer();
-}, 8000);
+  // If initPlayer didn't connect (hlsPlayer still null), schedule next retry
+  // The HLS error handler also calls scheduleStreamRetry on fatal errors
+  if (!hlsPlayer && !nativeHlsActive) {
+    scheduleStreamRetry();
+  }
+}
+
+// Pause retries when tab is hidden, resume immediately when visible
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearTimeout(streamRetryTimer);
+  } else if (!hlsPlayer && !nativeHlsActive) {
+    streamRetryDelay = STREAM_RETRY_MIN; // reset backoff on user return
+    attemptStreamRetry();
+  }
+});
+
+// Start the first retry cycle
+scheduleStreamRetry();
 
 // --- Player Controls ---
 
