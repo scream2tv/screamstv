@@ -28,22 +28,26 @@ function startHlsTranscode(streamKey: string): void {
   mkdirSync(outDir, { recursive: true });
 
   // Passthrough remux: OBS handles all encoding, server just repackages
-  // RTMP → HLS. reset_timestamps in hls_flags resets PTS to 0 at each
-  // segment boundary, fixing the black-screen PTS gap from prior attempts.
-  // (Do NOT use -use_wallclock_as_timestamps — it conflicts with copy mode
-  // and causes ffmpeg to stall on segment creation.)
+  // RTMP → HLS. -start_at_zero + -avoid_negative_ts normalize the RTMP
+  // source PTS so the HLS timeline starts near zero, preventing the
+  // black-screen gap from stale PTS values. Do NOT use
+  // -use_wallclock_as_timestamps (breaks segment timing with copy mode)
+  // or reset_timestamps hls_flag (unavailable in ffmpeg 6.1).
   const args = [
     '-hide_banner',
     '-loglevel', 'warning',
     '-fflags', '+genpts+discardcorrupt',
+    '-start_at_zero',
+    '-copyts',
     '-i', `rtmp://127.0.0.1:1935/live/${streamKey}`,
     '-c:v', 'copy',
     '-c:a', 'copy',
     '-bsf:v', 'h264_mp4toannexb',
+    '-avoid_negative_ts', 'make_zero',
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_list_size', '6',
-    '-hls_flags', 'delete_segments+program_date_time+independent_segments+omit_endlist+reset_timestamps',
+    '-hls_flags', 'delete_segments+program_date_time+independent_segments+omit_endlist',
     '-hls_segment_type', 'mpegts',
     '-start_number', '0',
     '-hls_segment_filename', join(outDir, 'seg%03d.ts'),
