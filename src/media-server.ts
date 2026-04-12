@@ -28,12 +28,15 @@ function startHlsTranscode(streamKey: string): void {
   mkdirSync(outDir, { recursive: true });
 
   // Passthrough remux: OBS handles encoding, server repackages RTMP → HLS.
-  // RTMP timestamps are relative to stream start; ffmpeg normalizes them
-  // for the output by default. No -copyts/-start_at_zero/-use_wallclock
-  // needed — those flags all conflict with copy mode in different ways.
+  // Extended probe/timeout settings are required because node-media-server
+  // delays frame data after the RTMP handshake; without them ffmpeg's
+  // default probe window expires before the first keyframe arrives.
   const args = [
     '-hide_banner',
     '-loglevel', 'warning',
+    '-rw_timeout', '5000000',
+    '-analyzeduration', '5000000',
+    '-probesize', '5000000',
     '-fflags', '+genpts+discardcorrupt',
     '-i', `rtmp://127.0.0.1:1935/live/${streamKey}`,
     '-c:v', 'copy',
