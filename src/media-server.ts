@@ -34,7 +34,7 @@ function startHlsTranscode(streamKey: string): void {
     '-b:a', '128k',
     '-f', 'hls',
     '-hls_time', '2',
-    '-hls_list_size', '3',
+    '-hls_list_size', '6',
     '-hls_flags', 'delete_segments',
     '-hls_segment_filename', join(outDir, 'seg%03d.ts'),
     join(outDir, 'index.m3u8'),
