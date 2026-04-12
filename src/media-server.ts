@@ -19,10 +19,6 @@ const config = {
     ping: 30,
     ping_timeout: 60,
   },
-  http: {
-    port: 8888,
-    allow_origin: '*',
-  },
 };
 
 const ffmpegProcesses = new Map<string, ChildProcess>();
