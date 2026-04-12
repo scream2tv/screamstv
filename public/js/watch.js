@@ -2,9 +2,13 @@
 
 const pathParts = location.pathname.split('/');
 const STREAM_KEY = pathParts[pathParts.length - 1];
-const USERNAME = getOrCreateUsername();
 
-document.getElementById('navUsername').textContent = USERNAME;
+// USERNAME is kept as a local-only identifier for this browser (used if
+// we ever wire up a "remember me" flow). It is NOT passed to the WebSocket
+// anymore — the server forces unauthenticated viewers to "Viewer" and
+// ignores ?username=. See src/ws/handler.ts.
+const USERNAME = getOrCreateUsername();
+document.getElementById('navUsername').textContent = 'Viewer';
 
 let ws = null;
 let hlsPlayer = null;
@@ -13,16 +17,30 @@ let isFollowing = false;
 
 // --- Load Streamer Info ---
 
+function showStreamerError(text) {
+  const el = document.getElementById('streamerLoadError');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.add('visible');
+}
+function clearStreamerError() {
+  const el = document.getElementById('streamerLoadError');
+  if (el) el.classList.remove('visible');
+}
+
 async function loadStreamerInfo() {
   try {
     const resp = await fetch(`/api/v1/streams/${STREAM_KEY}`);
     const json = await resp.json();
     if (!resp.ok) {
       document.getElementById('offlineText').textContent = 'Channel not found';
+      document.getElementById('streamerName').textContent = 'Unknown channel';
+      showStreamerError('Channel not found');
       return;
     }
     const data = json.data;
 
+    clearStreamerError();
     document.getElementById('streamerName').textContent = data.name;
     document.getElementById('streamerAvatar').textContent = data.name.charAt(0).toUpperCase();
     document.getElementById('streamTitle').textContent = data.title;
@@ -35,6 +53,8 @@ async function loadStreamerInfo() {
     }
   } catch (e) {
     console.error('Failed to load streamer info:', e);
+    document.getElementById('streamerName').textContent = 'Loading failed';
+    showStreamerError("Couldn't load channel info");
   }
 }
 
@@ -77,9 +97,26 @@ function initPlayer() {
   }
 }
 
-// Retry connecting to stream periodically
+// Retry connecting to stream periodically. Briefly flip the offline
+// panel into a "checking" state + swap the primary label so the user
+// can see something's happening.
 setInterval(() => {
-  if (!hlsPlayer) initPlayer();
+  if (hlsPlayer) return;
+  const offline = document.getElementById('playerOffline');
+  const offlineText = document.getElementById('offlineText');
+  if (!offline || !offlineText) return;
+
+  offline.classList.add('checking');
+  const originalText = 'Signal offline';
+  offlineText.textContent = 'Reconnecting…';
+  setTimeout(() => {
+    offline.classList.remove('checking');
+    if (offlineText.textContent === 'Reconnecting…') {
+      offlineText.textContent = originalText;
+    }
+  }, 1600);
+
+  initPlayer();
 }, 8000);
 
 // --- Player Controls ---
@@ -117,20 +154,46 @@ document.getElementById('fullscreenBtn').addEventListener('click', () => {
 });
 
 // --- WebSocket ---
+//
+// Exponential backoff reconnect: 1s → 2s → 4s → 8s → max 30s.
+// The backoff resets on the server's {type:"connected"} handshake.
+// Close code 4001 (Priority #3 invalid-token path) is treated as fatal
+// — no reconnect loop, visible "Authentication failed" message.
+// We deliberately no longer pass &username= — the server now forces
+// "Viewer" for unauthenticated connections (see ws/handler.ts).
+
+const WS_BACKOFF_MIN = 1000;
+const WS_BACKOFF_MAX = 30000;
+let wsBackoff = WS_BACKOFF_MIN;
+let wsFatal = false;
+let wsHadOpen = false;
+let wsReconnectTimer = null;
 
 function connectWS() {
+  if (wsFatal) return;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const url = `${proto}://${location.host}/ws?stream=${encodeURIComponent(STREAM_KEY)}&username=${encodeURIComponent(USERNAME)}&role=viewer`;
+  const url = `${proto}://${location.host}/ws?stream=${encodeURIComponent(STREAM_KEY)}&role=viewer`;
 
   ws = new WebSocket(url);
 
   ws.addEventListener('open', () => {
-    addChatMessage({ type: 'system', message: 'Connected to chat' });
+    wsHadOpen = true;
   });
 
   ws.addEventListener('message', (event) => {
     try {
       const msg = JSON.parse(event.data);
+      if (msg.type === 'connected') {
+        // Server-side handshake: reset backoff and surface reconnect UX
+        wsBackoff = WS_BACKOFF_MIN;
+        if (wsReconnectTimer) {
+          addChatMessage({ type: 'system', message: 'Chat reconnected' });
+          wsReconnectTimer = null;
+        } else {
+          addChatMessage({ type: 'system', message: 'Connected to chat' });
+        }
+        return;
+      }
       if (msg.type === 'chat' || msg.type === 'tip' || msg.type === 'system') {
         addChatMessage(msg);
       }
@@ -140,12 +203,26 @@ function connectWS() {
     } catch {}
   });
 
-  ws.addEventListener('close', () => {
-    setTimeout(connectWS, 3000);
+  ws.addEventListener('close', (event) => {
+    if (event.code === 4001) {
+      wsFatal = true;
+      addChatMessage({ type: 'system', message: 'Authentication failed — chat disabled' });
+      return;
+    }
+
+    // Only announce a disconnect if we had been successfully open — otherwise
+    // we'd flood the chat with reconnect notices on a server that's down.
+    if (wsHadOpen && !wsReconnectTimer) {
+      addChatMessage({ type: 'system', message: 'Chat disconnected — reconnecting…' });
+    }
+
+    const delay = wsBackoff;
+    wsBackoff = Math.min(wsBackoff * 2, WS_BACKOFF_MAX);
+    wsReconnectTimer = setTimeout(connectWS, delay);
   });
 
   ws.addEventListener('error', () => {
-    ws.close();
+    try { ws.close(); } catch {}
   });
 }
 
@@ -174,197 +251,18 @@ document.getElementById('followBtn').addEventListener('click', () => {
   btn.classList.toggle('btn-following', isFollowing);
 });
 
-// --- Midnight Wallet Detection ---
-
-const MIDNIGHT_NETWORK = 'preprod';
-const NATIVE_TOKEN = '0000000000000000000000000000000000000000000000000000000000000000';
+// Note: tipping is in Phase 2. The previous wallet-detection /
+// tip-modal / sendTipWithWallet block was deleted in this commit
+// because the DOM elements it bound to (#tipBtnBar, #tipModal,
+// .tip-preset, etc.) were stripped out of watch.html long ago, so
+// every page load was throwing a TypeError on the first
+// addEventListener and silently breaking everything below — including
+// the WebSocket reconnect added in this same priority. When Midnight
+// integration ships in Priority #5 it'll come back behind real DOM.
 
 let streamerShieldedAddress = null;
-let detectedWallets = [];
-
-const KNOWN_WALLETS = [
-  { id: 'mnLace', name: 'Lace', icon: null },
-  { id: '1am',   name: '1AM',  icon: null },
-];
-
-function detectWallets() {
-  return new Promise((resolve) => {
-    const found = [];
-    let attempts = 0;
-
-    function check() {
-      if (!window.midnight) {
-        if (++attempts < 30) { setTimeout(check, 100); return; }
-        resolve(found);
-        return;
-      }
-
-      for (const w of KNOWN_WALLETS) {
-        const api = window.midnight[w.id];
-        if (api && !found.some(f => f.id === w.id)) {
-          found.push({ id: w.id, name: api.name || w.name, api });
-        }
-      }
-
-      // Also pick up any unknown wallets injected under window.midnight
-      for (const [key, api] of Object.entries(window.midnight)) {
-        if (api && typeof api.connect === 'function' && !found.some(f => f.id === key)) {
-          found.push({ id: key, name: api.name || key, api });
-        }
-      }
-
-      if (found.length === 0 && ++attempts < 30) {
-        setTimeout(check, 100);
-        return;
-      }
-
-      resolve(found);
-    }
-
-    check();
-  });
-}
-
-// --- Tip Modal ---
-
-function showTipStep(step) {
-  document.getElementById('tipStepAmount').classList.toggle('hidden', step !== 'amount');
-  document.getElementById('tipStepSending').classList.toggle('hidden', step !== 'sending');
-}
-
-function renderWalletButtons() {
-  const container = document.getElementById('tipWalletButtons');
-  container.innerHTML = '';
-
-  if (detectedWallets.length === 0) {
-    document.getElementById('tipNoWallet').classList.remove('hidden');
-    return;
-  }
-
-  document.getElementById('tipNoWallet').classList.add('hidden');
-
-  for (const wallet of detectedWallets) {
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-amber btn-full';
-    if (detectedWallets.length > 1) btn.style.marginBottom = '8px';
-    btn.textContent = detectedWallets.length === 1
-      ? 'Connect Wallet & Send'
-      : `Send with ${wallet.name}`;
-    btn.addEventListener('click', () => sendTipWithWallet(wallet));
-    container.appendChild(btn);
-  }
-}
-
-function openTipModal() {
-  document.getElementById('tipModal').classList.remove('hidden');
-  document.getElementById('tipAmountInput').value = '';
-  document.getElementById('tipMessageInput').value = '';
-  document.getElementById('tipResult').textContent = '';
-  document.getElementById('tipNoWallet').classList.add('hidden');
-  document.querySelectorAll('.tip-preset').forEach(b => b.classList.remove('active'));
-
-  renderWalletButtons();
-  showTipStep('amount');
-}
-
-function closeTipModal() {
-  document.getElementById('tipModal').classList.add('hidden');
-  showTipStep('amount');
-}
-
-document.getElementById('tipBtnBar').addEventListener('click', openTipModal);
-document.getElementById('tipBtnChat').addEventListener('click', openTipModal);
-document.getElementById('tipModalClose').addEventListener('click', closeTipModal);
-document.getElementById('tipModal').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('tipModal')) closeTipModal();
-});
-
-document.querySelectorAll('.tip-preset').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tip-preset').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tipAmountInput').value = btn.dataset.amount;
-  });
-});
-
-async function sendTipWithWallet(wallet) {
-  const amount = parseFloat(document.getElementById('tipAmountInput').value);
-  const message = document.getElementById('tipMessageInput').value.trim();
-  const resultEl = document.getElementById('tipResult');
-
-  if (!amount || amount <= 0) {
-    resultEl.textContent = 'Enter an amount';
-    resultEl.style.color = 'var(--red)';
-    return;
-  }
-
-  if (!streamerShieldedAddress) {
-    resultEl.textContent = 'Streamer address not loaded yet';
-    resultEl.style.color = 'var(--red)';
-    return;
-  }
-
-  resultEl.textContent = '';
-  showTipStep('sending');
-  document.getElementById('tipSendingText').textContent = `Connecting to ${wallet.name}…`;
-  document.getElementById('tipSendingSub').textContent = 'Approve the connection in the wallet popup';
-
-  try {
-    const connectedApi = await wallet.api.connect(MIDNIGHT_NETWORK);
-
-    document.getElementById('tipSendingText').textContent = 'Building transaction…';
-    document.getElementById('tipSendingSub').textContent = 'Approve the transfer in your wallet';
-
-    const amountStars = BigInt(Math.floor(amount * 1_000_000));
-
-    const result = await connectedApi.makeTransfer([{
-      kind: 'shielded',
-      tokenType: NATIVE_TOKEN,
-      value: amountStars,
-      recipient: streamerShieldedAddress,
-    }]);
-
-    document.getElementById('tipSendingText').textContent = 'Submitting to network…';
-    document.getElementById('tipSendingSub').textContent = 'Almost done';
-
-    await connectedApi.submitTransaction(result.tx);
-
-    try {
-      const apiKey = localStorage.getItem('screams_api_key');
-      if (apiKey) {
-        await fetch(`/api/v1/streams/${STREAM_KEY}/tip`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ amount: String(amount), message }),
-        });
-      } else {
-        await fetch('/api/tip/notify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ streamKey: STREAM_KEY, amount: String(amount), message, username: USERNAME }),
-        });
-      }
-    } catch {}
-
-    showTipStep('amount');
-    resultEl.textContent = 'Tip sent!';
-    resultEl.style.color = 'var(--green)';
-    setTimeout(closeTipModal, 2500);
-  } catch (e) {
-    console.error('Tip error:', e);
-    showTipStep('amount');
-    const msg = e?.message || String(e);
-    if (msg.includes('User rejected') || msg.includes('denied') || msg.includes('cancel')) {
-      resultEl.textContent = 'Transaction cancelled';
-    } else {
-      resultEl.textContent = msg.length > 120 ? msg.slice(0, 120) + '…' : msg;
-    }
-    resultEl.style.color = 'var(--red)';
-  }
-}
 
 // --- Init ---
 
 loadStreamerInfo();
 connectWS();
-detectWallets().then(wallets => { detectedWallets = wallets; });

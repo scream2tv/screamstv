@@ -72,9 +72,66 @@ function updateStats(streams) {
   statStreams.textContent = streams.length;
 }
 
+// DOM-only placeholder renderers (no innerHTML — content is fully trusted
+// static strings, but we build via createElement for defense-in-depth).
+function renderGridState(gridId, className, primary, secondary) {
+  const grid = document.getElementById(gridId);
+  if (!grid) return;
+  while (grid.firstChild) grid.removeChild(grid.firstChild);
+
+  const wrap = document.createElement('div');
+  wrap.className = `empty-state ${className}`;
+
+  if (className === 'stream-grid-loading') {
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'loading-dot';
+      wrap.appendChild(dot);
+    }
+  }
+
+  const p1 = document.createElement('p');
+  p1.className = className === 'stream-grid-error' ? 'text-amber' : 'text-dim text-sm';
+  if (className === 'stream-grid-error') p1.style.fontWeight = '600';
+  p1.textContent = primary;
+  wrap.appendChild(p1);
+
+  if (secondary) {
+    const p2 = document.createElement('p');
+    p2.className = 'text-sm text-dim mt-1';
+    p2.textContent = secondary;
+    wrap.appendChild(p2);
+  }
+  grid.appendChild(wrap);
+}
+
+function renderGridLoading(gridId, label) {
+  renderGridState(gridId, 'stream-grid-loading', label, '');
+}
+function renderGridError(gridId, message) {
+  renderGridState(gridId, 'stream-grid-error', message, 'Retrying automatically…');
+}
+
+// Initial dash placeholders for the stats row until the first fetch resolves.
+(function seedStatPlaceholders() {
+  ['statAgents', 'statLive', 'statStreams'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && (el.textContent === '0' || el.textContent.trim() === '')) {
+      el.textContent = '—';
+    }
+  });
+})();
+
+let firstLoadDone = false;
+
 async function loadStreams() {
+  if (!firstLoadDone) {
+    renderGridLoading('liveGrid', 'Loading streams…');
+    renderGridLoading('allGrid', 'Loading channels…');
+  }
   try {
     const resp = await fetch('/api/v1/streams');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
     const streams = (json.data || []).map(s => ({
       streamKey: s.stream_key,
@@ -93,26 +150,35 @@ async function loadStreams() {
     renderSidebarChannels(live);
     renderFeatured(live);
     updateStats(streams);
+    firstLoadDone = true;
   } catch (e) {
     console.error('Failed to load streams:', e);
+    renderGridError('liveGrid', "Couldn't load streams — retrying…");
+    renderGridError('allGrid', "Couldn't load channels — retrying…");
   }
 }
 
+const EMPTY_COPY = {
+  liveGrid: { primary: 'No one is live right now', secondary: 'Check back soon — streams are coming!' },
+  allGrid:  { primary: 'No channels yet', secondary: 'Registration is currently invite-only. Stay tuned!' },
+};
+
 function renderGrid(gridId, emptyId, streams) {
   const grid = document.getElementById(gridId);
-  const empty = document.getElementById(emptyId);
+  if (!grid) return;
 
   if (streams.length === 0) {
-    if (empty) empty.style.display = '';
-    Array.from(grid.querySelectorAll('.stream-card')).forEach(c => c.remove());
+    const copy = EMPTY_COPY[gridId] ?? { primary: 'Nothing here', secondary: '' };
+    renderGridState(gridId, '', copy.primary, copy.secondary);
     return;
   }
 
-  if (empty) empty.style.display = 'none';
-  const cards = streams.map(s => createStreamCard(s)).join('');
-  const emptyHTML = empty ? empty.outerHTML : '';
-  grid.innerHTML = emptyHTML + cards;
-  if (empty) grid.querySelector('.empty-state').style.display = 'none';
+  // Rebuild: remove whatever placeholder/cards are there, then append.
+  while (grid.firstChild) grid.removeChild(grid.firstChild);
+  const wrap = document.createElement('div');
+  // eslint-disable-next-line no-unsanitized/property -- content is escapeHtml'd in createStreamCard
+  wrap.innerHTML = streams.map(s => createStreamCard(s)).join('');
+  while (wrap.firstChild) grid.appendChild(wrap.firstChild);
 }
 
 function renderFeatured(liveStreams) {

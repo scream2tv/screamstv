@@ -29,12 +29,22 @@ document.getElementById('loginBtn').addEventListener('click', () => {
 document.getElementById('loginSubmit').addEventListener('click', async () => {
   const sk = document.getElementById('loginStreamKey').value.trim();
   const at = document.getElementById('loginAuth').value.trim();
-  if (!sk || !at) return;
+  if (!sk || !at) {
+    showSetupError('Both fields are required');
+    return;
+  }
+
+  const btn = document.getElementById('loginSubmit');
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  btn.textContent = 'Signing in…';
+  hideSetupError();
 
   try {
     const resp = await fetch(`/api/v1/streams/${sk}`);
     const json = await resp.json();
-    if (!resp.ok) throw new Error(json.error?.message || json.error);
+    if (!resp.ok) throw new Error(json.error?.message || json.error || 'Sign-in failed');
     const data = { displayName: json.data.name };
 
     streamKey = sk;
@@ -42,7 +52,10 @@ document.getElementById('loginSubmit').addEventListener('click', async () => {
     localStorage.setItem('screams_streamer', JSON.stringify({ streamKey: sk, authToken: at, displayName: data.displayName }));
     enterDashboard(data.displayName);
   } catch (e) {
-    showSetupError(e.message);
+    showSetupError(e.message || 'Sign-in failed');
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    btn.textContent = originalLabel;
   }
 });
 
@@ -114,16 +127,26 @@ function startPreview() {
 }
 
 // --- WebSocket ---
+//
+// Same exponential backoff as watch.js: 1s → 2s → 4s → 8s → max 30s,
+// reset on server handshake. No username param — the server ignores it
+// for unauthenticated connections anyway. The dashboard keeps using
+// role=streamer so media-server events still flow.
+
+const DASH_WS_MIN = 1000;
+const DASH_WS_MAX = 30000;
+let dashWsBackoff = DASH_WS_MIN;
 
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const url = `${proto}://${location.host}/ws?stream=${encodeURIComponent(streamKey)}&username=Streamer&role=streamer`;
+  const url = `${proto}://${location.host}/ws?stream=${encodeURIComponent(streamKey)}&role=streamer`;
 
   ws = new WebSocket(url);
 
   ws.addEventListener('message', (event) => {
     try {
       const msg = JSON.parse(event.data);
+      if (msg.type === 'connected') dashWsBackoff = DASH_WS_MIN;
       if (msg.type === 'tip') addTip(msg);
       if (msg.type === 'viewer_count') {
         document.getElementById('viewerCount').textContent = msg.count;
@@ -132,7 +155,9 @@ function connectWS() {
   });
 
   ws.addEventListener('close', () => {
-    setTimeout(connectWS, 3000);
+    const delay = dashWsBackoff;
+    dashWsBackoff = Math.min(dashWsBackoff * 2, DASH_WS_MAX);
+    setTimeout(connectWS, delay);
   });
 }
 
@@ -166,15 +191,30 @@ document.getElementById('updateInfoBtn').addEventListener('click', async () => {
   const title = document.getElementById('streamTitle').value.trim();
   const category = document.getElementById('streamCategory').value;
 
-  await fetch('/api/v1/streams/me', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${authToken}`,
-    },
-    body: JSON.stringify({ title, category }),
-  });
-  showToast('Stream info updated!');
+  const btn = document.getElementById('updateInfoBtn');
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  btn.textContent = 'Saving…';
+
+  try {
+    const resp = await fetch('/api/v1/streams/me', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ title, category }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    showToast('Stream info updated!');
+  } catch (e) {
+    showToast(`Update failed: ${e.message || 'network error'}`);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    btn.textContent = originalLabel;
+  }
 });
 
 // --- Helpers ---
@@ -203,6 +243,11 @@ function showToast(msg) {
 
 function showSetupError(msg) {
   const el = document.getElementById('setupError');
+  if (!el) return;
   el.textContent = msg;
   el.style.display = 'block';
+}
+function hideSetupError() {
+  const el = document.getElementById('setupError');
+  if (el) el.style.display = 'none';
 }

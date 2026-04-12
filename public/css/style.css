@@ -178,7 +178,9 @@ body::after {
   position: fixed;
   inset: 0;
   z-index: -2;
-  background-image: url('../assets/anglerfish_background.PNG');
+  /* Displayed at 4% opacity; aggressive WebP compression (~60KB vs 6.5MB PNG).
+     The PNG is kept in the repo as a fallback source. */
+  background-image: url('../assets/anglerfish_background.webp');
   background-size: cover;
   background-position: center;
   opacity: 0.04;
