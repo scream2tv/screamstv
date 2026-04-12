@@ -27,20 +27,44 @@ function startHlsTranscode(streamKey: string): void {
   const outDir = join(MEDIA_ROOT, 'live', streamKey);
   mkdirSync(outDir, { recursive: true });
 
+  // Owncast-aligned HLS transcode config (balanced latency tier: ~8-10s)
+  // Keyframe interval = fps(30) × segment_duration(3) = 90 frames
+  const SEGMENT_DURATION = 3;
+  const ASSUMED_FPS = 30;
+  const GOP = ASSUMED_FPS * SEGMENT_DURATION; // 90
+  const SEGMENT_COUNT = 8;
+
   const args = [
+    '-hide_banner',
+    '-loglevel', 'warning',
+    '-fflags', '+genpts',
+    '-flags', '+cgop',
     '-i', `rtmp://127.0.0.1:1935/live/${streamKey}`,
+    // Video: libx264 veryfast (Owncast default for software encode)
     '-c:v', 'libx264',
-    '-preset', 'ultrafast',
+    '-preset', 'veryfast',
     '-tune', 'zerolatency',
-    '-crf', '23',
-    '-force_key_frames', 'expr:gte(t,n_forced*2)',
+    '-profile:v', 'high',
+    '-pix_fmt', 'yuv420p',
+    '-sc_threshold', '0',
+    '-g', String(GOP),
+    '-keyint_min', String(GOP),
+    '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
+    '-b:v', '4500k',
+    '-maxrate', '4860k',
+    '-bufsize', '9000k',
+    // Audio: AAC 128k @ 44100 Hz
     '-c:a', 'aac',
     '-b:a', '128k',
+    '-ar', '44100',
+    // HLS output
     '-f', 'hls',
-    '-hls_time', '2',
-    '-hls_list_size', '6',
-    '-hls_flags', 'delete_segments',
+    '-hls_time', String(SEGMENT_DURATION),
+    '-hls_list_size', String(SEGMENT_COUNT),
+    '-hls_flags', 'delete_segments+program_date_time+independent_segments+omit_endlist',
+    '-hls_segment_type', 'mpegts',
     '-hls_segment_filename', join(outDir, 'seg%03d.ts'),
+    '-max_muxing_queue_size', '400',
     join(outDir, 'index.m3u8'),
   ];
 

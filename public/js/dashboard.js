@@ -117,9 +117,12 @@ function startPreview() {
     if (typeof Hls !== 'undefined' && Hls.isSupported()) {
       if (hlsPlayer) hlsPlayer.destroy();
       hlsPlayer = new Hls({
-        liveSyncDurationCount: 2,
-        liveMaxLatencyDurationCount: 4,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 5,
         liveBackBufferLength: 0,
+        maxBufferLength: 12,
+        maxMaxBufferLength: 30,
+        maxBufferHole: 0.5,
       });
       hlsPlayer.loadSource(hlsUrl);
       hlsPlayer.attachMedia(video);
