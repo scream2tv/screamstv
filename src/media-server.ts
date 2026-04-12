@@ -28,13 +28,14 @@ function startHlsTranscode(streamKey: string): void {
   mkdirSync(outDir, { recursive: true });
 
   // Passthrough remux: OBS handles all encoding, server just repackages
-  // RTMP → HLS. Wall-clock timestamps fix PTS mismatch that caused black
-  // screens with -c:v copy in previous attempts.
+  // RTMP → HLS. reset_timestamps in hls_flags resets PTS to 0 at each
+  // segment boundary, fixing the black-screen PTS gap from prior attempts.
+  // (Do NOT use -use_wallclock_as_timestamps — it conflicts with copy mode
+  // and causes ffmpeg to stall on segment creation.)
   const args = [
     '-hide_banner',
     '-loglevel', 'warning',
     '-fflags', '+genpts+discardcorrupt',
-    '-use_wallclock_as_timestamps', '1',
     '-i', `rtmp://127.0.0.1:1935/live/${streamKey}`,
     '-c:v', 'copy',
     '-c:a', 'copy',
@@ -42,7 +43,7 @@ function startHlsTranscode(streamKey: string): void {
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_list_size', '6',
-    '-hls_flags', 'delete_segments+program_date_time+independent_segments+omit_endlist',
+    '-hls_flags', 'delete_segments+program_date_time+independent_segments+omit_endlist+reset_timestamps',
     '-hls_segment_type', 'mpegts',
     '-start_number', '0',
     '-hls_segment_filename', join(outDir, 'seg%03d.ts'),
