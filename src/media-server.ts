@@ -27,23 +27,18 @@ function startHlsTranscode(streamKey: string): void {
   const outDir = join(MEDIA_ROOT, 'live', streamKey);
   mkdirSync(outDir, { recursive: true });
 
-  // Passthrough remux: OBS handles all encoding, server just repackages
-  // RTMP → HLS. -start_at_zero + -avoid_negative_ts normalize the RTMP
-  // source PTS so the HLS timeline starts near zero, preventing the
-  // black-screen gap from stale PTS values. Do NOT use
-  // -use_wallclock_as_timestamps (breaks segment timing with copy mode)
-  // or reset_timestamps hls_flag (unavailable in ffmpeg 6.1).
+  // Passthrough remux: OBS handles encoding, server repackages RTMP → HLS.
+  // RTMP timestamps are relative to stream start; ffmpeg normalizes them
+  // for the output by default. No -copyts/-start_at_zero/-use_wallclock
+  // needed — those flags all conflict with copy mode in different ways.
   const args = [
     '-hide_banner',
     '-loglevel', 'warning',
     '-fflags', '+genpts+discardcorrupt',
-    '-start_at_zero',
-    '-copyts',
     '-i', `rtmp://127.0.0.1:1935/live/${streamKey}`,
     '-c:v', 'copy',
     '-c:a', 'copy',
     '-bsf:v', 'h264_mp4toannexb',
-    '-avoid_negative_ts', 'make_zero',
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_list_size', '6',
