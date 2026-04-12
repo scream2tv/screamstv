@@ -765,9 +765,11 @@ body::after {
 .watch-layout.theater .chat-panel { display: none; }
 .watch-layout.theater .player-wrap { max-height: calc(100vh - 52px - 60px); }
 
-/* Fullscreen */
+/* Fullscreen — standard + webkit vendor prefixes */
 .player-wrap:fullscreen { max-height: none; }
 .player-wrap:fullscreen .player-video { height: 100vh; }
+.player-wrap:-webkit-full-screen { max-height: none; }
+.player-wrap:-webkit-full-screen .player-video { height: 100vh; }
 
 /* ═══════════════════════════════════════════════════════════════
    CHAT PANEL — Enhanced with better visual hierarchy
@@ -1542,4 +1544,11 @@ select option { background: var(--bg-card); color: var(--text); }
   .browse-hero-overlay { padding: 0 24px; }
   .stream-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
   .browse-container { padding: 12px 16px 40px; }
+}
+/* Touch devices — :hover doesn't fire, so controls rely on JS tap toggle.
+   Make tap targets larger and prevent controls from being permanently hidden. */
+@media (hover: none) and (pointer: coarse) {
+  .player-wrap:hover .player-controls { opacity: 0; }
+  .player-btn { padding: 10px 14px; font-size: 1.3rem; }
+  .volume-slider { width: 60px; }
 }

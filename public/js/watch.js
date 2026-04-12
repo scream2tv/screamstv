@@ -12,6 +12,7 @@ document.getElementById('navUsername').textContent = 'Viewer';
 
 let ws = null;
 let hlsPlayer = null;
+let nativeHlsActive = false;
 let isTheater = false;
 let isFollowing = false;
 
@@ -60,6 +61,28 @@ async function loadStreamerInfo() {
 
 // --- HLS Player ---
 
+// Attempt play with muted fallback for autoplay policy.
+// Browsers block unmuted autoplay; retry muted so the stream isn't black.
+function tryPlay(video) {
+  video.play().catch(() => {
+    video.muted = true;
+    document.getElementById('muteBtn').textContent = '\u{1F507}';
+    video.play().catch(() => {});
+  });
+}
+
+function showLive(video, offline) {
+  video.style.display = 'block';
+  offline.style.display = 'none';
+  document.getElementById('livePill').style.display = 'inline-flex';
+}
+
+function showOffline(video, offline) {
+  video.style.display = 'none';
+  offline.style.display = 'flex';
+  document.getElementById('livePill').style.display = 'none';
+}
+
 function initPlayer() {
   const video = document.getElementById('videoPlayer');
   const offline = document.getElementById('playerOffline');
@@ -67,33 +90,60 @@ function initPlayer() {
 
   if (typeof Hls !== 'undefined' && Hls.isSupported()) {
     if (hlsPlayer) hlsPlayer.destroy();
+    nativeHlsActive = false;
     hlsPlayer = new Hls({ liveSyncDurationCount: 3, liveMaxLatencyDurationCount: 6 });
     hlsPlayer.loadSource(hlsUrl);
     hlsPlayer.attachMedia(video);
 
     hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-      video.play().catch(() => {});
-      video.style.display = 'block';
-      offline.style.display = 'none';
-      document.getElementById('livePill').style.display = 'inline-flex';
+      tryPlay(video);
+      showLive(video, offline);
     });
 
     hlsPlayer.on(Hls.Events.ERROR, (_e, data) => {
       if (data.fatal) {
-        video.style.display = 'none';
-        offline.style.display = 'flex';
-        document.getElementById('livePill').style.display = 'none';
+        showOffline(video, offline);
         hlsPlayer.destroy();
         hlsPlayer = null;
       }
     });
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Native HLS path (Safari). Guard against repeated initPlayer() calls
+    // stacking handlers while a native session is already active.
+    if (nativeHlsActive) return;
+    nativeHlsActive = true;
+
     video.src = hlsUrl;
-    video.addEventListener('loadedmetadata', () => {
-      video.play().catch(() => {});
-      video.style.display = 'block';
-      offline.style.display = 'none';
-    });
+
+    function onLoaded() {
+      tryPlay(video);
+      showLive(video, offline);
+      // Seek to live edge so the viewer isn't stuck on a stale frame
+      if (video.duration && isFinite(video.duration)) {
+        video.currentTime = video.duration;
+      }
+    }
+
+    function onError() {
+      showOffline(video, offline);
+      nativeHlsActive = false;
+      video.removeEventListener('loadedmetadata', onLoaded);
+      video.removeEventListener('error', onError);
+      video.removeAttribute('src');
+      video.load();
+    }
+
+    video.addEventListener('loadedmetadata', onLoaded, { once: true });
+    video.addEventListener('error', onError, { once: true });
+
+    // Periodically seek to live edge to prevent freeze/drift
+    const liveEdgeInterval = setInterval(() => {
+      if (!nativeHlsActive) { clearInterval(liveEdgeInterval); return; }
+      if (video.duration && isFinite(video.duration) && !video.paused) {
+        const behindLive = video.duration - video.currentTime;
+        if (behindLive > 5) video.currentTime = video.duration;
+      }
+    }, 4000);
   }
 }
 
@@ -101,17 +151,17 @@ function initPlayer() {
 // panel into a "checking" state + swap the primary label so the user
 // can see something's happening.
 setInterval(() => {
-  if (hlsPlayer) return;
+  if (hlsPlayer || nativeHlsActive) return;
   const offline = document.getElementById('playerOffline');
   const offlineText = document.getElementById('offlineText');
   if (!offline || !offlineText) return;
 
   offline.classList.add('checking');
   const originalText = 'Signal offline';
-  offlineText.textContent = 'Reconnecting…';
+  offlineText.textContent = 'Reconnecting\u2026';
   setTimeout(() => {
     offline.classList.remove('checking');
-    if (offlineText.textContent === 'Reconnecting…') {
+    if (offlineText.textContent === 'Reconnecting\u2026') {
       offlineText.textContent = originalText;
     }
   }, 1600);
@@ -129,14 +179,14 @@ document.getElementById('playPauseBtn').addEventListener('click', () => {
 document.getElementById('muteBtn').addEventListener('click', () => {
   const video = document.getElementById('videoPlayer');
   video.muted = !video.muted;
-  document.getElementById('muteBtn').innerHTML = video.muted ? '&#x1F507;' : '&#x1F50A;';
+  document.getElementById('muteBtn').textContent = video.muted ? '\u{1F507}' : '\u{1F50A}';
 });
 
 document.getElementById('volumeSlider').addEventListener('input', (e) => {
   const video = document.getElementById('videoPlayer');
   video.volume = e.target.value / 100;
   video.muted = false;
-  document.getElementById('muteBtn').innerHTML = video.volume === 0 ? '&#x1F507;' : '&#x1F50A;';
+  document.getElementById('muteBtn').textContent = video.volume === 0 ? '\u{1F507}' : '\u{1F50A}';
 });
 
 document.getElementById('theaterBtn').addEventListener('click', () => {
@@ -146,12 +196,58 @@ document.getElementById('theaterBtn').addEventListener('click', () => {
 
 document.getElementById('fullscreenBtn').addEventListener('click', () => {
   const wrap = document.getElementById('playerWrap');
-  if (document.fullscreenElement) {
-    document.exitFullscreen();
-  } else {
+  const video = document.getElementById('videoPlayer');
+
+  const fsElement = document.fullscreenElement
+    || document.webkitFullscreenElement;
+
+  if (fsElement) {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+  } else if (wrap.requestFullscreen) {
     wrap.requestFullscreen().catch(() => {});
+  } else if (wrap.webkitRequestFullscreen) {
+    wrap.webkitRequestFullscreen();
+  } else if (video.webkitEnterFullscreen) {
+    // iOS Safari — only supports fullscreen on the <video> element itself
+    video.webkitEnterFullscreen();
   }
 });
+
+// --- Touch Controls (mobile) ---
+// Toggle control visibility on tap since :hover doesn't work on touch devices.
+(function setupTouchControls() {
+  const wrap = document.getElementById('playerWrap');
+  const controls = document.getElementById('playerControls');
+  let hideTimer = null;
+
+  function showControls() {
+    controls.style.opacity = '1';
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => { controls.style.opacity = ''; }, 3000);
+  }
+
+  wrap.addEventListener('touchstart', (e) => {
+    // Don't toggle when tapping on controls themselves
+    if (controls.contains(e.target)) return;
+    if (controls.style.opacity === '1') {
+      controls.style.opacity = '';
+      clearTimeout(hideTimer);
+    } else {
+      showControls();
+    }
+  }, { passive: true });
+
+  // Keep controls visible while interacting with them
+  controls.addEventListener('touchstart', () => {
+    clearTimeout(hideTimer);
+    controls.style.opacity = '1';
+    hideTimer = setTimeout(() => { controls.style.opacity = ''; }, 3000);
+  }, { passive: true });
+})();
 
 // --- WebSocket ---
 //
