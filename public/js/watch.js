@@ -15,6 +15,8 @@ let hlsPlayer = null;
 let nativeHlsActive = false;
 let isTheater = false;
 let isFollowing = false;
+let mediaErrorRecoveryCount = 0;
+const MAX_MEDIA_ERROR_RECOVERIES = 2;
 
 // --- Load Streamer Info ---
 
@@ -93,11 +95,17 @@ function initPlayer() {
     nativeHlsActive = false;
     hlsPlayer = new Hls({
       liveSyncDurationCount: 3,
-      liveMaxLatencyDurationCount: 5,
+      liveMaxLatencyDurationCount: 8,
       liveBackBufferLength: 0,
-      maxBufferLength: 12,
+      maxBufferLength: 15,
       maxMaxBufferLength: 30,
       maxBufferHole: 0.5,
+      enableWorker: true,
+      startFragPrefetch: true,
+      lowLatencyMode: false,
+      fragLoadingTimeOut: 20000,
+      manifestLoadingTimeOut: 10000,
+      levelLoadingTimeOut: 10000,
     });
     hlsPlayer.loadSource(hlsUrl);
     hlsPlayer.attachMedia(video);
@@ -111,9 +119,16 @@ function initPlayer() {
 
     hlsPlayer.on(Hls.Events.ERROR, (_e, data) => {
       if (data.fatal) {
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaErrorRecoveryCount < MAX_MEDIA_ERROR_RECOVERIES) {
+          mediaErrorRecoveryCount++;
+          console.warn(`[hls] recovering from MEDIA_ERROR (attempt ${mediaErrorRecoveryCount})`);
+          hlsPlayer.recoverMediaError();
+          return;
+        }
         showOffline(video, offline);
         hlsPlayer.destroy();
         hlsPlayer = null;
+        mediaErrorRecoveryCount = 0;
         scheduleStreamRetry();
       }
     });
@@ -396,6 +411,57 @@ document.getElementById('followBtn').addEventListener('click', () => {
 // integration ships in Priority #5 it'll come back behind real DOM.
 
 let streamerShieldedAddress = null;
+
+// --- Diagnostic Overlay (toggle with 'D' key) ---
+
+let diagVisible = false;
+let diagInterval = null;
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'D' || e.key === 'd') {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    diagVisible = !diagVisible;
+    const el = document.getElementById('diagOverlay');
+    if (!el) return;
+    el.style.display = diagVisible ? 'block' : 'none';
+    if (diagVisible && !diagInterval) {
+      diagInterval = setInterval(updateDiag, 1000);
+      updateDiag();
+    } else if (!diagVisible && diagInterval) {
+      clearInterval(diagInterval);
+      diagInterval = null;
+    }
+  }
+});
+
+function updateDiag() {
+  const el = document.getElementById('diagOverlay');
+  if (!el || !diagVisible) return;
+  const video = document.getElementById('videoPlayer');
+  const lines = [];
+
+  if (hlsPlayer) {
+    const buffered = video.buffered;
+    let bufLen = 0;
+    if (buffered.length > 0) {
+      bufLen = (buffered.end(buffered.length - 1) - video.currentTime).toFixed(1);
+    }
+    lines.push(`Buffer: ${bufLen}s`);
+    lines.push(`BW est: ${hlsPlayer.bandwidthEstimate ? (hlsPlayer.bandwidthEstimate / 1000).toFixed(0) + ' kbps' : 'n/a'}`);
+    const level = hlsPlayer.currentLevel >= 0 ? hlsPlayer.levels[hlsPlayer.currentLevel] : null;
+    if (level) {
+      lines.push(`Level: ${level.width}x${level.height}`);
+    }
+    lines.push(`Latency: ${hlsPlayer.latency ? hlsPlayer.latency.toFixed(1) + 's' : 'n/a'}`);
+  }
+
+  if (video.getVideoPlaybackQuality) {
+    const q = video.getVideoPlaybackQuality();
+    lines.push(`Dropped: ${q.droppedVideoFrames}/${q.totalVideoFrames}`);
+  }
+
+  el.textContent = lines.join('\n');
+}
 
 // --- Init ---
 

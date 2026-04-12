@@ -62,9 +62,13 @@ app.get('/skill.md', (_req, res) => {
 app.use(express.static(publicDir));
 
 app.use('/media', express.static(getMediaRoot(), {
-  setHeaders(res) {
+  setHeaders(res, filePath) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-store');
+    res.setHeader('Connection', 'keep-alive');
+    if (String(filePath).endsWith('.m3u8')) {
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    }
   },
 }));
 
