@@ -18,6 +18,10 @@ let isFollowing = false;
 let mediaErrorRecoveryCount = 0;
 const MAX_MEDIA_ERROR_RECOVERIES = 2;
 
+// Track the most recent chat message timestamp we've rendered so reconnects
+// can skip duplicates.
+let lastChatTimestamp = 0;
+
 // --- Load Streamer Info ---
 
 function showStreamerError(text) {
@@ -329,6 +333,29 @@ let wsFatal = false;
 let wsHadOpen = false;
 let wsReconnectTimer = null;
 
+async function fetchChatHistory() {
+  try {
+    const resp = await fetch(`/api/v1/streams/${STREAM_KEY}/chat?limit=200`);
+    if (!resp.ok) return;
+    const json = await resp.json();
+    const messages = json.data;
+    if (!Array.isArray(messages)) return;
+
+    for (const m of messages) {
+      // Skip messages we already rendered (reconnect dedup)
+      if (m.timestamp <= lastChatTimestamp) continue;
+      addChatMessage({ type: 'chat', username: m.username, message: m.message });
+      if (m.timestamp > lastChatTimestamp) lastChatTimestamp = m.timestamp;
+    }
+
+    // Scroll to bottom after loading history
+    const container = document.getElementById('chatMessages');
+    if (container) container.scrollTop = container.scrollHeight;
+  } catch {
+    // Fetch failed — skip silently, don't block chat
+  }
+}
+
 function connectWS() {
   if (wsFatal) return;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -346,16 +373,23 @@ function connectWS() {
       if (msg.type === 'connected') {
         // Server-side handshake: reset backoff and surface reconnect UX
         wsBackoff = WS_BACKOFF_MIN;
-        if (wsReconnectTimer) {
-          addChatMessage({ type: 'system', message: 'Chat reconnected' });
-          wsReconnectTimer = null;
-        } else {
-          addChatMessage({ type: 'system', message: 'Connected to chat' });
-        }
+        const isReconnect = !!wsReconnectTimer;
+        if (isReconnect) wsReconnectTimer = null;
+
+        // Fetch persisted chat history, then show the connection notice
+        fetchChatHistory().then(() => {
+          addChatMessage({
+            type: 'system',
+            message: isReconnect ? 'Chat reconnected' : 'Connected to chat',
+          });
+        });
         return;
       }
       if (msg.type === 'chat' || msg.type === 'tip' || msg.type === 'system') {
         addChatMessage(msg);
+        if (msg.timestamp && msg.timestamp > lastChatTimestamp) {
+          lastChatTimestamp = msg.timestamp;
+        }
       }
       if (msg.type === 'viewer_count') {
         updateViewerCounts(msg.count);
