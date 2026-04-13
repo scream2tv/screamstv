@@ -141,6 +141,7 @@ async function loadStreams() {
       category: s.category,
       isLive: s.is_live,
       viewerCount: s.viewer_count,
+      avatarUrl: s.avatar_url || '',
     }));
 
     // Skip DOM work entirely if nothing changed since last poll
@@ -166,7 +167,7 @@ async function loadStreams() {
 
 const EMPTY_COPY = {
   liveGrid: { primary: 'No one is live right now', secondary: 'Check back soon — streams are coming!' },
-  allGrid:  { primary: 'No channels yet', secondary: 'Registration is currently invite-only. Stay tuned!' },
+  allGrid:  { primary: 'No channels yet', secondary: 'Streaming on Screams is coming soon. Stay tuned!' },
 };
 
 function renderGrid(gridId, emptyId, streams) {
@@ -197,6 +198,14 @@ function renderFeatured(liveStreams) {
   container.innerHTML = createFeaturedCard(top);
 }
 
+function avatarHtml(stream, size) {
+  const initial = stream.displayName.charAt(0).toUpperCase();
+  if (stream.avatarUrl) {
+    return `<img src="${escapeHtml(stream.avatarUrl)}" alt="${escapeHtml(stream.displayName)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+  }
+  return escapeHtml(initial);
+}
+
 function createFeaturedCard(stream) {
   const initial = stream.displayName.charAt(0).toUpperCase();
   const viewers = formatCount(stream.viewerCount || 0);
@@ -211,7 +220,7 @@ function createFeaturedCard(stream) {
         <span class="stream-card-viewers">${viewers} viewers</span>
       </div>
       <div class="stream-card-info">
-        <div class="stream-card-avatar">${escapeHtml(initial)}</div>
+        <div class="stream-card-avatar">${avatarHtml(stream)}</div>
         <div class="stream-card-meta">
           <div class="stream-card-name">${escapeHtml(stream.displayName)}</div>
           <div class="stream-card-title">${escapeHtml(stream.title)}</div>
@@ -240,7 +249,7 @@ function createStreamCard(stream) {
         `}
       </div>
       <div class="stream-card-info">
-        <div class="stream-card-avatar">${escapeHtml(initial)}</div>
+        <div class="stream-card-avatar">${avatarHtml(stream)}</div>
         <div class="stream-card-meta">
           <div class="stream-card-name">${escapeHtml(stream.displayName)}</div>
           <div class="stream-card-title">${escapeHtml(stream.title)}</div>
@@ -263,10 +272,13 @@ function renderSidebarChannels(liveStreams) {
   container.innerHTML = liveStreams.map(s => {
     const initial = s.displayName.charAt(0).toUpperCase();
     const viewers = formatCount(s.viewerCount || 0);
+    const sidebarAvatar = s.avatarUrl
+      ? `<img src="${escapeHtml(s.avatarUrl)}" alt="${escapeHtml(s.displayName)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
+      : escapeHtml(initial);
     return `
       <a href="/watch/${s.streamKey}" class="sidebar-channel">
         <div class="sidebar-channel-avatar">
-          ${escapeHtml(initial)}
+          ${sidebarAvatar}
           <span class="live-dot-sm"></span>
         </div>
         <div class="sidebar-channel-info">

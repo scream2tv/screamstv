@@ -9,6 +9,7 @@ import v1Router from './routes/v1/index.js';
 import apiRouter from './routes/api.js';
 import { initWebSocket } from './ws/handler.js';
 import { startMediaServer, getMediaRoot } from './media-server.js';
+import { startAgentChat } from './agent-chat.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -90,6 +91,8 @@ try {
   console.warn(`[media] Could not start RTMP server: ${e.message}`);
   console.warn('[media] Streaming will not work, but the rest of the app is functional.');
 }
+
+startAgentChat();
 
 const PORT = Number(process.env.PORT) || 3000;
 

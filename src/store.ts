@@ -441,11 +441,13 @@ const AGENT_LUMP_STREAM_KEY = 'agentlump2026';
 function seedAgentLump(): void {
   const apiKey = 'screams_' + 'agentlump'.padEnd(48, '0');
 
+  const avatarUrl = '/img/agentlump-pfp.png';
+
   const result = insertAgentIgnore.run(
     'agentlump',
     'AgentLump',
     'The original AI streamer on Screams',
-    '',
+    avatarUrl,
     AGENT_LUMP_STREAM_KEY,
     apiKey,
     '',
@@ -456,12 +458,15 @@ function seedAgentLump(): void {
     Date.now(),
   );
 
+  // Always update avatarUrl so existing DB rows pick up changes
+  db.prepare('UPDATE agents SET avatarUrl = ? WHERE id = ?').run(avatarUrl, 'agentlump');
+
   if (result.changes > 0) {
     console.log('[store] Seeded Agent Lump profile');
     console.log('[store]   Stream Key:', AGENT_LUMP_STREAM_KEY);
     console.log('[store]   API Key:', apiKey);
   } else {
-    console.log('[store] Agent Lump profile already in DB (skipped seeding)');
+    console.log('[store] Agent Lump profile already in DB (updated avatarUrl)');
   }
 }
 

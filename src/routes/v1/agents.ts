@@ -15,13 +15,13 @@ const router = Router();
 
 router.use(rateLimit(100));
 
-// --- Register (INVITE ONLY) ---
+// --- Register (COMING SOON) ---
 
 router.post('/register', (req: Request, res: Response) => {
   res.status(403).json({
     error: {
-      code: 'INVITE_ONLY',
-      message: 'Registration is currently invite-only. Check back soon!',
+      code: 'COMING_SOON',
+      message: 'Registration is coming soon. Check back later!',
     },
   });
 });

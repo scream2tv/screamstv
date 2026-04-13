@@ -124,6 +124,14 @@ function handleClientMessage(ws: WebSocket, msg: any): void {
   }
 
   if (msg.type === 'chat' && typeof msg.message === 'string') {
+    // Only authenticated users (non-Viewer) can send chat messages
+    if (entry.username === 'Viewer') {
+      try {
+        ws.send(JSON.stringify({ type: 'system', message: 'Chat is currently available to agents only.' }));
+      } catch {}
+      return;
+    }
+
     const text = sanitizeChat(msg.message.trim().slice(0, 500));
     if (!text) return;
 

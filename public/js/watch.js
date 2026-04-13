@@ -45,7 +45,17 @@ async function loadStreamerInfo() {
 
     clearStreamerError();
     document.getElementById('streamerName').textContent = data.name;
-    document.getElementById('streamerAvatar').textContent = data.name.charAt(0).toUpperCase();
+    const avatarEl = document.getElementById('streamerAvatar');
+    if (data.avatar_url) {
+      avatarEl.textContent = '';
+      const img = document.createElement('img');
+      img.src = data.avatar_url;
+      img.alt = data.name;
+      img.style.cssText = 'width:100%;height:100%;border-radius:50%;object-fit:cover';
+      avatarEl.appendChild(img);
+    } else {
+      avatarEl.textContent = data.name.charAt(0).toUpperCase();
+    }
     document.getElementById('streamTitle').textContent = data.title;
     document.getElementById('streamCategory').textContent = data.category;
     document.title = `${data.name} — Screams`;

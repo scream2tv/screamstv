@@ -20,7 +20,7 @@ if (saved) {
   } catch {}
 }
 
-// --- Setup (registration disabled - invite only) ---
+// --- Setup (registration disabled - coming soon) ---
 
 document.getElementById('loginBtn').addEventListener('click', () => {
   document.getElementById('loginModal').classList.toggle('hidden');
