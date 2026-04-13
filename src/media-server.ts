@@ -14,7 +14,7 @@ mkdirSync(MEDIA_ROOT, { recursive: true });
 const config = {
   rtmp: {
     port: 1935,
-    chunk_size: 60000,
+    chunk_size: 4096,
     gop_cache: true,
     ping: 30,
     ping_timeout: 60,
